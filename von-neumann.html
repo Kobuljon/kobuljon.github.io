@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Von Neumann Architecture · Journey</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+  .i { color: var(--cyan); font-weight: 500; }  .d { color: var(--amber); font-weight: 500; }
+  .ab, .story .text .ab { color: #7fb4ff; } .db, .story .text .db { color: var(--amber); } .cb, .story .text .cb { color: var(--pink); }
+
+  /* intro */
+  .intro {
+    position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; text-align: center; padding: 24px;
+    background: radial-gradient(ellipse at center, rgba(5,7,11,.35), rgba(5,7,11,.92) 70%);
+    transition: opacity 1.2s ease, visibility 1.2s;
+  }
+  .intro.gone { opacity: 0; visibility: hidden; }
+  .intro h1 { font-size: clamp(38px, 7vw, 84px); line-height: .98; letter-spacing: -.035em; font-weight: 600; margin: 18px 0 20px; }
+  .intro h1 em { font-style: normal; color: transparent; -webkit-text-stroke: 1.2px rgba(234,240,247,.6); }
+  .intro p { max-width: 520px; margin: 0 auto 30px; color: var(--muted); font-size: 16.5px; line-height: 1.6; }
+  .intro .btn.primary { height: 48px; padding: 0 26px; font-size: 15px; border-radius: 999px; box-shadow: 0 0 40px rgba(94,230,255,.25); }
+  .intro .keys { margin-top: 22px; font: 400 11px var(--mono); color: var(--dim); letter-spacing: .1em; }
+
+  /* phase indicator */
+  .phases {
+    position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 9;
+    display: flex; align-items: center; gap: 4px; padding: 5px; border-radius: 999px;
+    opacity: 0; transition: opacity .6s;
+  }
+  .phases.show { opacity: 1; }
+  .phases span { font: 500 11.5px var(--mono); letter-spacing: .14em; text-transform: uppercase; padding: 8px 14px; border-radius: 999px; color: var(--dim); transition: all .4s; }
+  .phases span.on { color: #05070b; background: var(--pc); box-shadow: 0 0 22px var(--pc); }
+  .phases i { color: var(--dim); font-style: normal; font-size: 12px; }
+  .cycle { position: fixed; top: 62px; left: 50%; transform: translateX(-50%); z-index: 9; font: 400 11.5px var(--mono); color: var(--muted); letter-spacing: .08em; white-space: nowrap; transition: opacity .4s; }
+
+  /* story card */
+  .story { position: fixed; left: 18px; bottom: 18px; z-index: 8; width: min(440px, calc(100vw - 36px)); padding: 22px 22px 18px; transition: opacity .6s, transform .6s; }
+  .story.hidden { opacity: 0; transform: translateY(20px); pointer-events: none; }
+  .story h2 { font-size: 24px; line-height: 1.15; font-weight: 600; letter-spacing: -.015em; margin: 8px 0 10px; }
+  .story .text { color: #c5cedb; font-size: 15px; line-height: 1.62; }
+  .story .text b { color: var(--ink); font-weight: 600; }
+  .story .text ul { list-style: none; margin-top: 4px; }
+  .story .text li { padding: 5px 0 5px 16px; position: relative; font-size: 14px; }
+  .story .text li::before { content: ""; position: absolute; left: 0; top: 13px; width: 6px; height: 6px; border-radius: 2px; background: var(--amber); }
+  .defs { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin-top: 10px; font-size: 13.5px; }
+  .defs dt { font: 700 12.5px var(--mono); color: var(--cyan); padding-top: 2px; }
+  .defs dd { color: var(--muted); }
+  .story .row { display: flex; align-items: center; gap: 8px; margin-top: 18px; }
+  .story .row .spacer { flex: 1; }
+  .story .count { font: 400 11px var(--mono); color: var(--dim); letter-spacing: .08em; }
+  .progress { height: 2px; background: var(--line); margin-top: 14px; border-radius: 2px; overflow: hidden; }
+  .progress i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--cyan), var(--violet), var(--amber)); transition: width .6s cubic-bezier(.2,.8,.2,1); }
+  .fade-in { animation: rise .5s cubic-bezier(.2,.8,.2,1); }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .linkbtn { color: var(--cyan); text-decoration: none; font-weight: 500; }
+  .linkbtn:hover { text-decoration: underline; }
+
+  /* legend */
+  .legend { position: fixed; right: 18px; bottom: 18px; z-index: 7; padding: 12px 14px; display: grid; gap: 7px; font: 400 11.5px var(--mono); color: var(--muted); transition: opacity .6s; }
+  .legend div { display: flex; align-items: center; gap: 9px; }
+  .legend i { width: 14px; height: 3px; border-radius: 2px; background: var(--c); box-shadow: 0 0 8px var(--c); }
+  .legend i.dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  @media (max-width: 760px) {
+    .page-title { display: none; }
+    .phases { top: 60px; }
+    .phases span { padding: 6px 9px; font-size: 10px; letter-spacing: .08em; }
+    .cycle { top: 100px; font-size: 10.5px; }
+    .story { left: 8px; right: 8px; bottom: 8px; width: auto; padding: 16px 16px 14px; max-height: 50dvh; overflow-y: auto; }
+    .story h2 { font-size: 20px; }
+    .story .text { font-size: 14px; }
+    .legend { display: none; }
+  }
+</style>
+</head>
+<body class="stage">
+<div class="loading" id="loading">POWERING UP…</div>
+<canvas id="c" tabindex="0" aria-label="3D journey through a von Neumann computer"></canvas>
+
+<header class="topbar">
+  <a class="back" href="index.html">← Computer Architecture</a>
+  <div class="page-title">Von Neumann <span>/ architecture</span></div>
+</header>
+
+<div class="phases glass" id="phases" aria-hidden="true">
+  <span data-p="fetch" style="--pc: var(--cyan)">Fetch</span><i>›</i>
+  <span data-p="decode" style="--pc: var(--violet)">Decode</span><i>›</i>
+  <span data-p="execute" style="--pc: var(--amber)">Execute</span>
+</div>
+<div class="cycle" id="cycle"></div>
+
+<section class="intro" id="intro">
+  <div>
+    <div class="kicker">An immersive journey</div>
+    <h1>Inside the<br><em>von Neumann</em><br>machine</h1>
+    <p>Shrink down to the size of a signal. Follow a tiny program as it travels between memory and the processor — one fetch, one decode, one execute at a time.</p>
+    <button class="btn primary" id="enter">Enter the machine</button>
+    <div class="keys">← → TO MOVE · SPACE FOR NEXT · DRAG TO LOOK AROUND</div>
+  </div>
+</section>
+
+<section class="story glass hidden" id="story" aria-live="polite">
+  <div id="storyBody"></div>
+  <div class="row">
+    <button class="btn icon" id="prev" aria-label="Previous step">←</button>
+    <button class="btn primary" id="next">Next →</button>
+    <button class="btn" id="auto" aria-pressed="false" title="Play automatically">▶ Auto</button>
+    <span class="spacer"></span>
+    <span class="count" id="count"></span>
+  </div>
+  <div class="progress"><i id="bar"></i></div>
+</section>
+
+<div class="legend glass" id="legend" style="opacity:0">
+  <div><i class="dot" style="--c: var(--cyan)"></i>Instruction</div>
+  <div><i class="dot" style="--c: var(--amber)"></i>Data</div>
+  <div><i style="--c: #6aa8ff"></i>Address bus</div>
+  <div><i style="--c: var(--amber)"></i>Data bus</div>
+  <div><i style="--c: var(--pink)"></i>Control bus</div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const $ = id => document.getElementById(id);
+await Promise.race([
+  Promise.all([document.fonts.load('600 64px "Space Grotesk"'), document.fonts.load('700 64px "JetBrains Mono"'), document.fonts.load('400 32px "JetBrains Mono"')]),
+  new Promise(r => setTimeout(r, 2500)),
+]);
+
+/* =========================================================
+   THE PROGRAM IN MEMORY  (address → contents)
+   ========================================================= */
+const MEMORY = [
+  { v: 'LDA 5', t: 'instr' },  // 0  load the value at address 5 into the ACC
+  { v: 'ADD 6', t: 'instr' },  // 1  add the value at address 6 to the ACC
+  { v: 'STO 7', t: 'instr' },  // 2  store the ACC at address 7
+  { v: 'HLT',   t: 'instr' },  // 3  stop
+  { v: '',      t: 'empty' },  // 4
+  { v: 12,      t: 'data'  },  // 5
+  { v: 30,      t: 'data'  },  // 6
+  { v: 0,       t: 'data'  },  // 7  (the answer will be written here)
+];
+
+/* =========================================================
+   SCENE
+   ========================================================= */
+const COL = { cyan: 0x5ee6ff, amber: 0xffb547, violet: 0xa48cff, pink: 0xff6fae, blue: 0x6aa8ff, green: 0x7dffb0 };
+const KIND = { addr: COL.blue, instr: COL.cyan, data: COL.amber, ctrl: COL.pink };
+
+const canvas = $('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x04060a);
+scene.fog = new THREE.FogExp2(0x04060a, 0.026);
+
+const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 300);
+camera.position.set(-30, 26, 60);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.06;
+controls.minDistance = 2.5; controls.maxDistance = 60; controls.maxPolarAngle = Math.PI * 0.495;
+controls.target.set(0, 1.5, 0);
+controls.autoRotate = true; controls.autoRotateSpeed = 0.25;
+
+scene.add(new THREE.HemisphereLight(0x8fa8ff, 0x05060a, 0.7));
+const dl = new THREE.DirectionalLight(0xffffff, 1.2); dl.position.set(5, 12, 8); scene.add(dl);
+
+/* ---------- helpers ---------- */
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const glowColor = (hex, k = 2.2) => new THREE.Color(hex).multiplyScalar(k);
+function canvasTex(w, h, draw) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const g = cv.getContext('2d'); draw && draw(g, w, h);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  return { cv, g, t };
+}
+function rr(g, x, y, w, h, r) { g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); }
+const SANS = '"Space Grotesk", system-ui, sans-serif', MONO = '"JetBrains Mono", ui-monospace, monospace';
+const hex = c => '#' + new THREE.Color(c).getHexString();
+
+// a dark glass body with glowing edges
+const glowing = [];
+function glassBox(w, h, d, edgeHex, r = 0.06) {
+  const geo = new RoundedBoxGeometry(w, h, d, 2, r);
+  const body = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x121c2c, emissive: 0x060b14, roughness: 0.35, metalness: 0.45 }));
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w, h, d)), new THREE.LineBasicMaterial({ color: glowColor(edgeHex, 1.6) }));
+  edges.scale.setScalar(0.995); body.add(edges);
+  const ent = { edges, base: new THREE.Color(edgeHex), glow: 0, goal: 0, flash: 0, k: 1.6 };
+  glowing.push(ent); body.userData.ent = ent;
+  return body;
+}
+function textSprite(text, colorHex, { size = 0.34, bg = 'rgba(6,9,14,.88)', font = MONO, weight = 700 } = {}) {
+  const fs = 64, pad = 30;
+  const tmp = document.createElement('canvas').getContext('2d'); tmp.font = `${weight} ${fs}px ${font}`;
+  const w = Math.ceil(tmp.measureText(text).width) + pad * 2, h = fs + 34;
+  const { t } = canvasTex(w, h, g => {
+    if (bg) { rr(g, 2, 2, w - 4, h - 4, h / 2 - 2); g.fillStyle = bg; g.fill(); g.lineWidth = 3; g.strokeStyle = hex(colorHex); g.stroke(); }
+    g.font = `${weight} ${fs}px ${font}`; g.fillStyle = bg ? '#ffffff' : hex(colorHex); g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(text, w / 2, h / 2 + 3);
+  });
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true }));
+  s.scale.set(size * w / h, size, 1); s.renderOrder = 20;
+  return s;
+}
+function floorText(text, w, h, colorHex, opacity = 0.75) {
+  const px = 160;
+  const { t } = canvasTex(Math.round(w * px), Math.round(h * px), (g, cw, ch) => {
+    g.font = `500 ${ch * 0.62}px ${MONO}`; g.fillStyle = hex(colorHex); g.textBaseline = 'middle';
+    if ('letterSpacing' in g) g.letterSpacing = `${ch * 0.12}px`;
+    g.fillText(text, 4, ch / 2);
+  });
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; return m;
+}
+
+/* ---------- ground ---------- */
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(260, 260), new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false,
+  uniforms: { uColor: { value: new THREE.Color(0x3d6a9a) } },
+  vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+  fragmentShader: `uniform vec3 uColor; varying vec3 vW;
+    float grid(vec2 p, float s){ vec2 q = p / s; vec2 g = abs(fract(q - .5) - .5) / fwidth(q); return 1. - min(min(g.x, g.y), 1.); }
+    void main(){ float d = length(vW.xz - vec2(-1., 0.)); float fade = 1. - smoothstep(6., 34., d);
+      float l = grid(vW.xz, 1.) * .22 + grid(vW.xz, 5.) * .45; gl_FragColor = vec4(uColor * l * fade, l * fade); }`,
+}));
+ground.rotation.x = -Math.PI / 2; scene.add(ground);
+
+/* ---------- main memory tower ---------- */
+const FACE = -8.0, MEM_X = -9.3, MEM_Z = -0.4;
+const cellY = i => 0.55 + i * 0.78;
+const cells = [];
+const memGroup = new THREE.Group(); scene.add(memGroup);
+MEMORY.forEach((m, i) => {
+  const edge = m.t === 'instr' ? COL.cyan : m.t === 'data' ? COL.amber : 0x3a4658;
+  const box = glassBox(2.6, 0.62, 4.6, edge, 0.05);
+  box.position.set(MEM_X, cellY(i), MEM_Z); memGroup.add(box);
+  const disp = canvasTex(832, 198);
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.62), new THREE.MeshBasicMaterial({ map: disp.t, transparent: true, color: 0xeeeeee }));
+  face.position.set(MEM_X, cellY(i), MEM_Z + 2.31); memGroup.add(face);
+  cells.push({ box, disp, type: m.t, edge, drawn: null });
+});
+function drawCell(i, value, active) {
+  const c = cells[i], key = value + '|' + active; if (c.drawn === key) return; c.drawn = key;
+  const { g, cv, t } = c.disp, w = cv.width, h = cv.height;
+  g.clearRect(0, 0, w, h);
+  g.fillStyle = active ? 'rgba(40,60,90,.55)' : 'rgba(6,10,16,.55)'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#6f7c8f'; g.font = `500 26px ${MONO}`; g.textBaseline = 'middle'; g.fillText('ADDRESS', 32, 50);
+  g.fillStyle = '#e9eef5'; g.font = `700 92px ${MONO}`; g.fillText(String(i), 40, 128);
+  g.fillStyle = 'rgba(255,255,255,.12)'; g.fillRect(232, 26, 3, h - 52);
+  const col = c.type === 'instr' ? '#5ee6ff' : c.type === 'data' ? '#ffb547' : '#4a5566';
+  g.fillStyle = col; g.font = `500 26px ${MONO}`; g.fillText(c.type === 'instr' ? 'INSTRUCTION' : c.type === 'data' ? 'DATA' : 'EMPTY', 270, 50);
+  g.fillStyle = c.type === 'empty' ? '#3a4454' : '#ffffff'; g.font = `700 96px ${MONO}`;
+  g.fillText(value === '' ? '—' : String(value), 266, 130);
+  t.needsUpdate = true;
+}
+// caps + label
+const cap = new THREE.Mesh(new THREE.BoxGeometry(2.9, 0.08, 4.9), new THREE.MeshStandardMaterial({ color: 0x1a2232, metalness: .6, roughness: .3 }));
+cap.position.set(MEM_X, cellY(MEMORY.length - 1) + 0.45, MEM_Z); scene.add(cap);
+const memLabel = textSprite('MAIN MEMORY (RAM)', COL.cyan, { size: 0.42, bg: null, font: MONO });
+memLabel.position.set(MEM_X, cellY(MEMORY.length - 1) + 1.05, MEM_Z + 1.2); scene.add(memLabel);
+
+/* ---------- the CPU ---------- */
+const POD_Y = 0.75;
+const REG = { PC: [5.7, 1.6], MAR: [3.2, 1.6], MDR: [3.2, -0.4], CIR: [5.7, -0.4], ACC: [10.7, 1.0] };
+const REG_FULL = { PC: 'Program Counter', MAR: 'Memory Address Reg.', MDR: 'Memory Data Reg.', CIR: 'Current Instruction Reg.', ACC: 'Accumulator' };
+const pods = {};
+Object.entries(REG).forEach(([name, [x, z]]) => {
+  const box = glassBox(1.8, 1.0, 1.0, COL.cyan, 0.08); box.position.set(x, POD_Y, z); scene.add(box);
+  const disp = canvasTex(576, 320);
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.94), new THREE.MeshBasicMaterial({ map: disp.t, transparent: true, color: 0xeeeeee }));
+  face.position.set(x, POD_Y, z + 0.505); scene.add(face);
+  const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.85, 0.12, 40), new THREE.MeshStandardMaterial({ color: 0x0e1420, metalness: .6, roughness: .4 }));
+  ped.position.set(x, 0.06, z); scene.add(ped);
+  pods[name] = { box, disp, drawn: null, ent: box.userData.ent };
+});
+function drawReg(name, value) {
+  const p = pods[name]; const key = String(value); if (p.drawn === key) return; p.drawn = key;
+  const { g, cv, t } = p.disp, w = cv.width, h = cv.height;
+  g.clearRect(0, 0, w, h);
+  g.fillStyle = 'rgba(6,10,16,.6)'; rr(g, 0, 0, w, h, 24); g.fill();
+  g.textBaseline = 'middle';
+  g.fillStyle = '#5ee6ff'; g.font = `700 60px ${MONO}`; g.fillText(name, 30, 56);
+  g.fillStyle = '#7d8a9c'; g.font = `400 24px ${MONO}`; g.fillText(REG_FULL[name], 30, 104);
+  const v = value === null || value === undefined ? '—' : String(value);
+  g.fillStyle = value === null ? '#3a4454' : '#ffffff'; g.textAlign = 'center';
+  g.font = `700 ${v.length > 4 ? 86 : 118}px ${MONO}`; g.fillText(v, w / 2, 220);
+  g.textAlign = 'left'; t.needsUpdate = true;
+}
+
+// Control Unit
+const CU_POS = V(8.3, 1.05, -2.4);
+const cu = glassBox(2.9, 1.5, 1.4, COL.violet, 0.1); cu.position.copy(CU_POS); scene.add(cu);
+const cuDisp = canvasTex(896, 448);
+const cuFace = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 1.4), new THREE.MeshBasicMaterial({ map: cuDisp.t, transparent: true, color: 0xeeeeee }));
+cuFace.position.set(CU_POS.x, CU_POS.y, CU_POS.z + 0.705); scene.add(cuFace);
+const cuRing = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.035, 12, 80), new THREE.MeshBasicMaterial({ color: glowColor(COL.violet, 2.5) }));
+cuRing.position.set(CU_POS.x, CU_POS.y + 1.2, CU_POS.z); scene.add(cuRing);
+const cuRing2 = new THREE.Mesh(new THREE.TorusGeometry(0.38, 0.02, 12, 80), new THREE.MeshBasicMaterial({ color: glowColor(COL.violet, 1.8) }));
+cuRing2.position.copy(cuRing.position); scene.add(cuRing2);
+let cuDrawn = null;
+function drawCU(lines) {
+  const key = JSON.stringify(lines); if (cuDrawn === key) return; cuDrawn = key;
+  const { g, cv, t } = cuDisp, w = cv.width, h = cv.height;
+  g.clearRect(0, 0, w, h); g.fillStyle = 'rgba(8,8,20,.6)'; rr(g, 0, 0, w, h, 30); g.fill();
+  g.textBaseline = 'middle';
+  g.fillStyle = '#a48cff'; g.font = `700 50px ${MONO}`; g.fillText('CONTROL UNIT', 40, 64);
+  g.fillStyle = '#7d8a9c'; g.font = `400 24px ${MONO}`; g.fillText('decodes · controls · synchronises', 40, 112);
+  if (lines && lines[0]) {
+    g.fillStyle = '#ffffff'; g.font = `700 92px ${MONO}`; g.fillText(lines[0], 40, 236);
+    g.fillStyle = '#c9bfff'; g.font = `500 30px ${SANS}`; wrap(g, lines[1] || '', 40, 330, w - 80, 40);
+  } else { g.fillStyle = '#3a4454'; g.font = `700 92px ${MONO}`; g.fillText('—', 40, 236); }
+  t.needsUpdate = true;
+}
+function wrap(g, text, x, y, maxW, lh) {
+  const words = text.split(' '); let line = '';
+  for (const wd of words) { const test = line + wd + ' '; if (g.measureText(test).width > maxW && line) { g.fillText(line, x, y); line = wd + ' '; y += lh; } else line = test; }
+  g.fillText(line, x, y);
+}
+
+// ALU (the classic V-shaped symbol, standing up)
+const ALU_POS = V(8.3, 0.15, 1.0);
+const aluShape = new THREE.Shape();
+aluShape.moveTo(-1.15, 1.6); aluShape.lineTo(-0.2, 1.6); aluShape.lineTo(0, 1.25); aluShape.lineTo(0.2, 1.6); aluShape.lineTo(1.15, 1.6);
+aluShape.lineTo(0.55, 0); aluShape.lineTo(-0.55, 0); aluShape.closePath();
+const aluGeo = new THREE.ExtrudeGeometry(aluShape, { depth: 0.6, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04, bevelSegments: 2 });
+aluGeo.translate(0, 0, -0.3);
+const alu = new THREE.Mesh(aluGeo, new THREE.MeshStandardMaterial({ color: 0x161008, roughness: .3, metalness: .5 }));
+const aluEdges = new THREE.LineSegments(new THREE.EdgesGeometry(aluGeo, 30), new THREE.LineBasicMaterial({ color: glowColor(COL.amber, 1.6) }));
+aluEdges.scale.setScalar(1.006); alu.add(aluEdges); alu.position.copy(ALU_POS); scene.add(alu);
+const aluEnt = { edges: aluEdges, base: new THREE.Color(COL.amber), glow: 0, goal: 0, flash: 0, k: 1.6 }; glowing.push(aluEnt);
+const aluDisp = canvasTex(640, 300);
+const aluFace = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.75), new THREE.MeshBasicMaterial({ map: aluDisp.t, transparent: true, color: 0xeeeeee }));
+aluFace.position.set(ALU_POS.x, ALU_POS.y + 0.72, ALU_POS.z + 0.35); scene.add(aluFace);
+let aluDrawn = null;
+function drawALU(text) {
+  if (aluDrawn === text) return; aluDrawn = text;
+  const { g, cv, t } = aluDisp, w = cv.width, h = cv.height; g.clearRect(0, 0, w, h);
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = '#ffb547'; g.font = `700 64px ${MONO}`; g.fillText('ALU', w / 2, 60);
+  g.fillStyle = text ? '#ffffff' : '#3a4454'; g.font = `700 ${text && text.length > 9 ? 62 : 78}px ${MONO}`; g.fillText(text || '—', w / 2, 190);
+  t.needsUpdate = true;
+}
+const aluPed = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.2, 0.15, 48), new THREE.MeshStandardMaterial({ color: 0x0e1420, metalness: .6, roughness: .4 }));
+aluPed.position.set(ALU_POS.x, 0.075, ALU_POS.z); scene.add(aluPed);
+
+// CPU boundary on the floor
+const cpuOutline = new THREE.Shape();
+(() => { const x0 = 1.6, x1 = 12.2, z0 = -3.7, z1 = 3.0, r = 0.6;
+  cpuOutline.moveTo(x0 + r, z0); cpuOutline.lineTo(x1 - r, z0); cpuOutline.quadraticCurveTo(x1, z0, x1, z0 + r);
+  cpuOutline.lineTo(x1, z1 - r); cpuOutline.quadraticCurveTo(x1, z1, x1 - r, z1); cpuOutline.lineTo(x0 + r, z1);
+  cpuOutline.quadraticCurveTo(x0, z1, x0, z1 - r); cpuOutline.lineTo(x0, z0 + r); cpuOutline.quadraticCurveTo(x0, z0, x0 + r, z0); })();
+const outlinePts = cpuOutline.getPoints(60).map(p => V(p.x, 0.02, p.y));
+const cpuLine = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(outlinePts), new THREE.LineBasicMaterial({ color: glowColor(COL.violet, 1.3), transparent: true, opacity: .8 }));
+scene.add(cpuLine);
+const cpuFloor = new THREE.Mesh(new THREE.ShapeGeometry(cpuOutline), new THREE.MeshBasicMaterial({ color: 0x1a1430, transparent: true, opacity: .35, depthWrite: false }));
+cpuFloor.rotation.x = Math.PI / 2; cpuFloor.position.y = 0.01; scene.add(cpuFloor);
+const cpuText = floorText('CENTRAL PROCESSING UNIT', 5.6, 0.42, COL.violet, .8); cpuText.position.set(4.7, 0.025, 2.55); scene.add(cpuText);
+
+/* ---------- buses ---------- */
+const ADDR_Z = 1.6, DATA_Z = -0.4, CTRL_Z = -2.4;
+function flowTex() {
+  const { t } = canvasTex(512, 16, (g, w, h) => {
+    for (let i = 0; i < 4; i++) {
+      const x = i * w / 4; const gr = g.createLinearGradient(x, 0, x + w / 4, 0);
+      gr.addColorStop(0, 'rgba(255,255,255,0.0)'); gr.addColorStop(0.75, 'rgba(255,255,255,0.15)'); gr.addColorStop(0.97, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = gr; g.fillRect(x, 0, w / 4, h);
+    }
+  });
+  t.wrapS = THREE.RepeatWrapping; return t;
+}
+const flowA = flowTex(), flowB = flowTex(); // A flows towards memory (-x), B flows towards the CPU (+x)
+flowB.repeat.x = -1;
+const lanes = [];
+function laneStrip(x0, x1, z, width, colorHex, tex, k = 2.2) {
+  const len = x1 - x0;
+  const t = tex.clone(); t.needsUpdate = true; t.repeat.x = (tex === flowB ? -1 : 1) * len / 4;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(len, width), new THREE.MeshBasicMaterial({ map: t, color: glowColor(colorHex, k), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; m.position.set((x0 + x1) / 2, 0.03, z); scene.add(m);
+  const base = new THREE.Mesh(new THREE.PlaneGeometry(len, width * 1.6), new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex).multiplyScalar(.18), transparent: true, opacity: .9, depthWrite: false }));
+  base.rotation.x = -Math.PI / 2; base.position.set((x0 + x1) / 2, 0.025, z); scene.add(base);
+  lanes.push({ t, dir: tex === flowA ? 1 : -1, mat: m.material, colorHex, k });
+}
+// address bus: one way (CPU → memory)
+laneStrip(FACE, 2.3, ADDR_Z, 0.34, COL.blue, flowA);
+// data bus & control bus: both ways
+laneStrip(FACE, 2.3, DATA_Z - 0.13, 0.16, COL.amber, flowA); laneStrip(FACE, 2.3, DATA_Z + 0.13, 0.16, COL.amber, flowB);
+laneStrip(FACE, 6.95, CTRL_Z - 0.13, 0.16, COL.pink, flowA); laneStrip(FACE, 6.95, CTRL_Z + 0.13, 0.16, COL.pink, flowB);
+// risers on the memory face
+[[ADDR_Z, COL.blue], [DATA_Z, COL.amber], [CTRL_Z, COL.pink]].forEach(([z, c]) => {
+  const top = cellY(MEMORY.length - 1) + 0.3;
+  const r = new THREE.Mesh(new THREE.PlaneGeometry(0.14, top), new THREE.MeshBasicMaterial({ color: glowColor(c, 0.9), transparent: true, opacity: .55, depthWrite: false }));
+  r.rotation.y = Math.PI / 2; r.position.set(FACE + 0.02, top / 2, z); scene.add(r);
+});
+[['←  ADDRESS BUS · one way', ADDR_Z + 0.42, COL.blue], ['↔  DATA BUS · both ways', DATA_Z + 0.42, COL.amber], ['↔  CONTROL BUS · both ways', CTRL_Z + 0.42, COL.pink]]
+  .forEach(([txt, z, c]) => { const ft = floorText(txt, 4.6, 0.3, c, .7); ft.position.set(-4.2, 0.03, z); scene.add(ft); });
+
+/* ---------- atmosphere ---------- */
+const NP = 700, pp = new Float32Array(NP * 3), ps = new Float32Array(NP);
+for (let i = 0; i < NP; i++) { pp[i * 3] = (Math.random() - .5) * 70; pp[i * 3 + 1] = Math.random() * 22; pp[i * 3 + 2] = (Math.random() - .5) * 70; ps[i] = Math.random(); }
+const pGeo = new THREE.BufferGeometry(); pGeo.setAttribute('position', new THREE.BufferAttribute(pp, 3));
+const motes = new THREE.Points(pGeo, new THREE.PointsMaterial({ map: null, color: 0x9fdcff, size: 0.06, transparent: true, opacity: .55, depthWrite: false, blending: THREE.AdditiveBlending }));
+scene.add(motes);
+
+/* ---------- post-processing ---------- */
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.9, 0.55, 1.0);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+/* =========================================================
+   PACKETS & ANIMATION
+   ========================================================= */
+const anims = new Set();
+const animate = (ms, fn) => new Promise(res => anims.add({ t0: performance.now(), ms, fn, res }));
+function cancelAll() { anims.forEach(a => a.res(false)); anims.clear(); packets.forEach(p => p.dispose()); packets.clear(); }
+const smooth = k => k * k * (3 - 2 * k);
+
+const haloTex = canvasTex(128, 128, (g, w, h) => {
+  const r = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+  r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(.25, 'rgba(255,255,255,.35)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = r; g.fillRect(0, 0, w, h);
+}).t;
+motes.material.map = haloTex; motes.material.size = 0.12; motes.material.needsUpdate = true;
+const coreGeo = new THREE.SphereGeometry(0.13, 20, 20), trailGeo = new THREE.SphereGeometry(0.07, 8, 8);
+const packets = new Set();
+function makePacket(text, kind) {
+  const c = KIND[kind];
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(coreGeo, new THREE.MeshBasicMaterial({ color: glowColor(c, 4) })));
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, color: c, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+  halo.scale.setScalar(1.3); g.add(halo);
+  const lbl = textSprite(String(text), c, { size: 0.36 }); lbl.position.y = 0.55; g.add(lbl);
+  scene.add(g);
+  const trailMat = new THREE.MeshBasicMaterial({ color: glowColor(c, 2.2), transparent: true, opacity: .8 });
+  const trail = Array.from({ length: 14 }, (_, i) => { const m = new THREE.Mesh(trailGeo, trailMat); m.scale.setScalar(1 - i / 14); m.visible = false; scene.add(m); return m; });
+  const hist = [];
+  const p = {
+    g, set(pos) { g.position.copy(pos); hist.unshift(pos.clone()); if (hist.length > 42) hist.pop(); trail.forEach((m, i) => { const h = hist[i * 3]; if (h) { m.position.copy(h); m.visible = true; } }); },
+    dispose() { scene.remove(g); trail.forEach(m => scene.remove(m)); packets.delete(p); },
+  };
+  packets.add(p); return p;
+}
+function polyline(pts) {
+  const segs = []; let total = 0;
+  for (let i = 0; i < pts.length - 1; i++) { const l = pts[i].distanceTo(pts[i + 1]); segs.push(l); total += l; }
+  return { total, at(k) { let d = k * total; for (let i = 0; i < segs.length; i++) { if (d <= segs[i] || i === segs.length - 1) return pts[i].clone().lerp(pts[i + 1], Math.min(d / segs[i], 1)); d -= segs[i]; } } };
+}
+function nodeTop(n) {
+  if (REG[n]) return V(REG[n][0], POD_Y + 0.62, REG[n][1]);
+  if (n === 'CU') return V(CU_POS.x, CU_POS.y + 0.85, CU_POS.z);
+  if (n === 'ALU') return V(ALU_POS.x, ALU_POS.y + 1.75, ALU_POS.z);
+}
+function arc(a, b, h = 1.5) {
+  const mid = a.clone().add(b).multiplyScalar(.5); mid.y = Math.max(a.y, b.y) + h;
+  const curve = new THREE.QuadraticBezierCurve3(a, mid, b); return curve.getPoints(30);
+}
+const LANE = 0.1;
+function route(spec) {
+  const [from, to] = spec.split('>');
+  if (to.startsWith('MEM')) {
+    const y = cellY(+to.split(':')[1]);
+    if (from === 'MAR') return [V(2.3, POD_Y, ADDR_Z), V(2.0, LANE, ADDR_Z), V(FACE + 0.15, LANE, ADDR_Z), V(FACE + 0.15, y, ADDR_Z), V(FACE, y, ADDR_Z)];
+    if (from === 'MDR') return [V(2.3, POD_Y, DATA_Z), V(2.0, LANE, DATA_Z + .13), V(FACE + 0.15, LANE, DATA_Z + .13), V(FACE + 0.15, y, DATA_Z), V(FACE, y, DATA_Z)];
+    if (from === 'CU') return [V(CU_POS.x - 1.45, CU_POS.y, CTRL_Z), V(6.7, LANE, CTRL_Z - .13), V(FACE + 0.15, LANE, CTRL_Z - .13), V(FACE + 0.15, y, CTRL_Z), V(FACE, y, CTRL_Z)];
+  }
+  if (from.startsWith('MEM')) {
+    const y = cellY(+from.split(':')[1]);
+    return [V(FACE, y, DATA_Z), V(FACE + 0.15, y, DATA_Z), V(FACE + 0.15, LANE, DATA_Z + .13), V(2.0, LANE, DATA_Z + .13), V(2.3, POD_Y, DATA_Z)];
+  }
+  return arc(nodeTop(from), nodeTop(to));
+}
+
+/* =========================================================
+   STATE
+   ========================================================= */
+const S0 = { PC: 0, MAR: null, MDR: null, CIR: null, ACC: null, mem: MEMORY.map(m => m.v), cu: null, alu: '' };
+let S = structuredClone(S0);
+const activeCells = new Set();
+function render(st) {
+  Object.keys(REG).forEach(n => drawReg(n, st[n]));
+  st.mem.forEach((v, i) => drawCell(i, v, activeCells.has(i)));
+  drawCU(st.cu); drawALU(st.alu);
+}
+function flash(name) {
+  if (pods[name]) pods[name].ent.flash = 1;
+  if (name === 'CU') cu.userData.ent.flash = 1;
+  if (name === 'ALU') aluEnt.flash = 1;
+  if (name.startsWith('MEM')) cells[+name.split(':')[1]].box.userData.ent.flash = 1;
+}
+function applySet(st, set) { for (const k in set) { if (k.startsWith('mem')) st.mem[+k.slice(3)] = set[k]; else st[k] = set[k]; } }
+
+/* =========================================================
+   THE JOURNEY  — every step of the story
+   ========================================================= */
+const fetchQuick = (addr, instr) => [
+  { move: 'PC>MAR', label: addr, kind: 'addr', set: { MAR: addr }, fast: true },
+  { set: { PC: addr + 1 }, flash: 'PC' },
+  { par: [{ move: `MAR>MEM:${addr}`, label: addr, kind: 'addr', fast: true }, { move: `CU>MEM:${addr}`, label: 'READ', kind: 'ctrl', fast: true }] },
+  { mem: addr },
+  { move: `MEM:${addr}>MDR`, label: instr, kind: 'instr', set: { MDR: instr }, fast: true },
+  { move: 'MDR>CIR', label: instr, kind: 'instr', set: { CIR: instr }, fast: true },
+];
+const readData = (addr, value) => [
+  { move: 'CIR>MAR', label: addr, kind: 'addr', set: { MAR: addr } },
+  { par: [{ move: `MAR>MEM:${addr}`, label: addr, kind: 'addr' }, { move: `CU>MEM:${addr}`, label: 'READ', kind: 'ctrl' }] },
+  { mem: addr },
+  { move: `MEM:${addr}>MDR`, label: value, kind: 'data', set: { MDR: value } },
+];
+
+const STEPS = [
+  { view: 'overview', kicker: 'Prologue', title: 'Welcome inside the machine',
+    text: 'In 1945, the mathematician <b>John von Neumann</b> described a design for a computer that keeps its <b>program and its data together in the same memory</b>. Almost every computer you have ever used — including your phone — still follows this idea.<br><br>Press <b>Next</b> to explore it.' },
+  { view: 'memory', kicker: 'The stored program concept', title: 'Main memory', focus: ['MEM'],
+    text: 'Memory is a stack of numbered <b>locations</b>. Each one has an <b>address</b> (its number) and <b>contents</b> (what is stored there).<br><br>Look closely: <span class="i">instructions</span> and <span class="d">data</span> sit side by side in the <b>same memory</b>. This is the <b>stored program concept</b>.' },
+  { view: 'cpu', kicker: 'The processor', title: 'The CPU', focus: ['CU', 'ALU'],
+    text: 'The CPU fetches each instruction from memory and carries it out. The <b>Control Unit (CU)</b> directs everything that happens, and the <b>Arithmetic Logic Unit (ALU)</b> does the calculations and comparisons.' },
+  { view: 'registers', kicker: 'Registers', title: 'Five special registers', focus: ['PC', 'MAR', 'MDR', 'CIR', 'ACC'],
+    text: 'Registers are tiny, extremely fast storage locations inside the CPU.<dl class="defs"><dt>PC</dt><dd>address of the next instruction</dd><dt>MAR</dt><dd>address about to be read or written</dd><dt>MDR</dt><dd>data or instruction just read / to be written</dd><dt>CIR</dt><dd>instruction being decoded and executed</dd><dt>ACC</dt><dd>results of calculations</dd></dl>' },
+  { view: 'buses', kicker: 'Buses', title: 'Three buses connect them', focus: ['BUS'],
+    text: '<b class="ab">Address bus</b> — carries addresses, <b>one way</b>: CPU → memory.<br><b class="db">Data bus</b> — carries data and instructions, <b>both ways</b>.<br><b class="cb">Control bus</b> — carries signals such as <b>read</b> and <b>write</b>, both ways.',
+    acts: [{ par: [{ move: 'MAR>MEM:5', label: '5', kind: 'addr', demo: true }, { move: 'CU>MEM:5', label: 'READ', kind: 'ctrl', demo: true }] }, { move: 'MEM:5>MDR', label: '12', kind: 'data', demo: true }] },
+
+  // ---- instruction 1: LDA 5 ----
+  { view: 'pcmar', phase: 'fetch', cycle: 'Instruction 1 of 4 · LDA 5', title: 'Copy the PC into the MAR', focus: ['PC', 'MAR'],
+    text: 'Let\'s run a real program. The <b>PC</b> holds the address of the first instruction: <b>0</b>. That address is copied into the <b>MAR</b>.',
+    acts: [{ move: 'PC>MAR', label: 0, kind: 'addr', set: { MAR: 0 } }] },
+  { view: 'pcmar', phase: 'fetch', cycle: 'Instruction 1 of 4 · LDA 5', title: 'Increment the PC', focus: ['PC'],
+    text: 'The <b>PC</b> is incremented by 1. It now points to the <b>next</b> instruction (address 1), ready for the next cycle.',
+    acts: [{ wait: 300 }, { set: { PC: 1 }, flash: 'PC' }] },
+  { view: 'busfar', phase: 'fetch', cycle: 'Instruction 1 of 4 · LDA 5', title: 'Send the address to memory', focus: ['BUS'],
+    text: 'The address in the MAR travels along the <b class="ab">address bus</b> to memory. At the same time, the Control Unit sends a <b class="cb">memory read</b> signal along the <b class="cb">control bus</b>.',
+    acts: [{ par: [{ move: 'MAR>MEM:0', label: 0, kind: 'addr' }, { move: 'CU>MEM:0', label: 'READ', kind: 'ctrl' }] }, { mem: 0 }] },
+  { view: 'busfar', phase: 'fetch', cycle: 'Instruction 1 of 4 · LDA 5', title: 'The instruction travels back', focus: ['MDR'],
+    text: 'The contents of address 0 — the instruction <b>LDA 5</b> — are sent along the <b class="db">data bus</b> and arrive in the <b>MDR</b>.',
+    acts: [{ mem: 0 }, { move: 'MEM:0>MDR', label: 'LDA 5', kind: 'instr', set: { MDR: 'LDA 5' } }] },
+  { view: 'mdrcir', phase: 'fetch', cycle: 'Instruction 1 of 4 · LDA 5', title: 'Copy the MDR into the CIR', focus: ['MDR', 'CIR'],
+    text: 'The instruction is copied from the <b>MDR</b> into the <b>CIR</b>. The <b>fetch</b> is complete.',
+    acts: [{ move: 'MDR>CIR', label: 'LDA 5', kind: 'instr', set: { CIR: 'LDA 5' } }] },
+  { view: 'cu', phase: 'decode', cycle: 'Instruction 1 of 4 · LDA 5', title: 'The Control Unit decodes it', focus: ['CU'],
+    text: 'The <b>CU</b> splits the instruction into an <b>opcode</b> — <b>LDA</b>, “load into the accumulator” — and an <b>operand</b> — <b>5</b>, the address where the data is kept.',
+    acts: [{ move: 'CIR>CU', label: 'LDA 5', kind: 'instr' }, { set: { cu: ['LDA 5', 'Load the value at address 5 into the ACC'] }, flash: 'CU' }] },
+  { view: 'busfar', phase: 'execute', cycle: 'Instruction 1 of 4 · LDA 5', title: 'Execute: fetch the data', focus: ['MAR', 'MDR'],
+    text: 'To execute, the operand <b>5</b> goes into the <b>MAR</b> and memory is read again. This time the contents are <span class="d">data</span>: the number <b>12</b> arrives in the <b>MDR</b>.',
+    acts: readData(5, 12) },
+  { view: 'acc', phase: 'execute', cycle: 'Instruction 1 of 4 · LDA 5', title: 'Load the accumulator', focus: ['ACC'],
+    text: 'The value <b>12</b> is copied from the MDR into the <b>ACC</b>. Instruction 1 is complete — and the cycle immediately starts again.',
+    acts: [{ move: 'MDR>ACC', label: 12, kind: 'data', set: { ACC: 12 } }] },
+
+  // ---- instruction 2: ADD 6 ----
+  { view: 'busfar', phase: 'fetch', cycle: 'Instruction 2 of 4 · ADD 6', title: 'Fetch the next instruction', focus: ['PC', 'MAR', 'MDR', 'CIR'],
+    text: 'The same fetch, a little faster: <b>PC → MAR</b>, <b>PC + 1</b>, address and <b class="cb">read</b> signal out to memory, instruction back along the <b class="db">data bus</b> into the <b>MDR</b>, then into the <b>CIR</b>.',
+    acts: fetchQuick(1, 'ADD 6') },
+  { view: 'cu', phase: 'decode', cycle: 'Instruction 2 of 4 · ADD 6', title: 'Decode: ADD 6', focus: ['CU'],
+    text: 'Opcode <b>ADD</b>, operand <b>6</b>: “add the value stored at address 6 to the accumulator”.',
+    acts: [{ move: 'CIR>CU', label: 'ADD 6', kind: 'instr' }, { set: { cu: ['ADD 6', 'Add the value at address 6 to the ACC'] }, flash: 'CU' }] },
+  { view: 'busfar', phase: 'execute', cycle: 'Instruction 2 of 4 · ADD 6', title: 'Fetch the second number', focus: ['MAR', 'MDR'],
+    text: 'Address <b>6</b> goes into the MAR and out along the address bus. The value <b>30</b> comes back along the data bus into the MDR.',
+    acts: readData(6, 30) },
+  { view: 'alu', phase: 'execute', cycle: 'Instruction 2 of 4 · ADD 6', title: 'The ALU calculates', focus: ['ALU', 'ACC'],
+    text: 'The <b>ALU</b> adds the value in the ACC (<b>12</b>) to the value in the MDR (<b>30</b>). The result, <b>42</b>, is stored back in the <b>accumulator</b>.',
+    acts: [{ par: [{ move: 'ACC>ALU', label: 12, kind: 'data' }, { move: 'MDR>ALU', label: 30, kind: 'data' }] }, { set: { alu: '12 + 30' }, flash: 'ALU' }, { wait: 900 }, { set: { alu: '= 42' }, flash: 'ALU' }, { wait: 500 }, { move: 'ALU>ACC', label: 42, kind: 'data', set: { ACC: 42, alu: '12 + 30 = 42' } }] },
+
+  // ---- instruction 3: STO 7 ----
+  { view: 'busfar', phase: 'fetch', cycle: 'Instruction 3 of 4 · STO 7', title: 'Fetch', focus: ['PC', 'MAR', 'MDR', 'CIR'],
+    text: 'Fetch again. The PC holds <b>2</b>, so the instruction at address 2 is fetched into the CIR.',
+    acts: fetchQuick(2, 'STO 7') },
+  { view: 'cu', phase: 'decode', cycle: 'Instruction 3 of 4 · STO 7', title: 'Decode: STO 7', focus: ['CU'],
+    text: 'Opcode <b>STO</b>, operand <b>7</b>: “store the accumulator at address 7”. This time data will travel <b>into</b> memory.',
+    acts: [{ move: 'CIR>CU', label: 'STO 7', kind: 'instr' }, { set: { cu: ['STO 7', 'Store the ACC at address 7'] }, flash: 'CU' }] },
+  { view: 'busfar', phase: 'execute', cycle: 'Instruction 3 of 4 · STO 7', title: 'Write to memory', focus: ['MEM:7'],
+    text: 'Address <b>7</b> goes into the MAR, the ACC value <b>42</b> is copied into the MDR, and the CU sends a <b class="cb">memory write</b> signal. The <b class="db">data bus</b> carries 42 <b>into</b> memory — it works in both directions.',
+    acts: [{ par: [{ move: 'CIR>MAR', label: 7, kind: 'addr', set: { MAR: 7 } }, { move: 'ACC>MDR', label: 42, kind: 'data', set: { MDR: 42 } }] },
+      { par: [{ move: 'MAR>MEM:7', label: 7, kind: 'addr' }, { move: 'CU>MEM:7', label: 'WRITE', kind: 'ctrl' }] }, { mem: 7 },
+      { move: 'MDR>MEM:7', label: 42, kind: 'data', set: { mem7: 42 }, flashTo: 'MEM:7' }] },
+
+  // ---- instruction 4: HLT ----
+  { view: 'cu', phase: 'decode', cycle: 'Instruction 4 of 4 · HLT', title: 'Halt', focus: ['CU', 'MEM:7'],
+    text: 'The last instruction is fetched from address 3 and decoded: <b>HLT</b> — stop. The program is finished, and memory location 7 now holds the answer: <b>42</b>.',
+    acts: [...fetchQuick(3, 'HLT'), { phase: 'decode' }, { move: 'CIR>CU', label: 'HLT', kind: 'instr' }, { set: { cu: ['HLT', 'Stop — the program has finished'] }, flash: 'CU' }], startPhase: 'fetch' },
+
+  { view: 'bottleneck', kicker: 'Epilogue', title: 'The von Neumann bottleneck', focus: ['BUS'],
+    text: 'Every instruction <b>and</b> every piece of data had to travel along the <b>same buses</b>, one after another. The CPU is far faster than memory, so it often has to <b>wait</b>. This limit is called the <b>von Neumann bottleneck</b> — one reason CPUs have fast <b>cache</b> memory.',
+    acts: [{ traffic: true }] },
+  { view: 'overview', kicker: 'Summary', title: 'What you\'ve seen',
+    text: '<ul><li>Instructions and data are stored together in main memory — the <b>stored program concept</b></li><li>The CPU contains the <b>CU</b>, the <b>ALU</b> and registers: <b>PC, MAR, MDR, CIR, ACC</b></li><li>The <b class="ab">address</b>, <b class="db">data</b> and <b class="cb">control</b> buses link CPU and memory</li><li>The CPU repeats <b>fetch → decode → execute</b> for every instruction</li></ul><div style="margin-top:12px"><a class="linkbtn" href="cpu.html">Explore the CPU in 3D →</a></div>' },
+];
+
+// snapshots: the state at the end of every step (so Back / jumping always shows the right values)
+function collect(acts, st) { for (const a of acts || []) { if (a.par) collect(a.par, st); if (a.set && !a.demo) applySet(st, a.set); } }
+const SNAP = []; { const st = structuredClone(S0); STEPS.forEach(s => { collect(s.acts, st); SNAP.push(structuredClone(st)); }); }
+
+/* =========================================================
+   RUNNING A STEP
+   ========================================================= */
+let current = -1, runId = 0, autoplay = false, autoTimer = null;
+const VIEWS = {
+  overview:   [V(2, 11, 22.5), V(-0.5, 0.4, 0.5)],
+  memory:     [V(-3.6, 4.8, 9.6), V(-8.6, 3.0, 0)],
+  cpu:        [V(7, 8.5, 12.5), V(7, 0.8, -0.4)],
+  registers:  [V(4.4, 4.3, 8.6), V(4.4, 0.8, 0.5)],
+  buses:      [V(-2.5, 5.2, 9.8), V(-2.6, 0.3, -0.4)],
+  pcmar:      [V(4.4, 3.5, 7.2), V(4.4, 0.9, 0.9)],
+  mdrcir:     [V(4.4, 3.5, 6.2), V(4.4, 0.9, -0.3)],
+  busfar:     [V(-1, 8.2, 15.5), V(-2, 2.0, -0.4)],
+  cu:         [V(7.6, 5.6, 3.9), V(8.1, 1.2, -2.0)],
+  alu:        [V(9, 3.6, 8.6), V(9, 1.0, 0.6)],
+  acc:        [V(7, 5.2, 9.8), V(7, 0.8, 0.4)],
+  bottleneck: [V(-5.5, 1.7, 5.2), V(-1.5, 0.3, -0.6)],
+};
+let flight = null;
+function flyTo(name, ms = 1800) {
+  const [p, t] = VIEWS[name]; const pos = p.clone();
+  const aspect = innerWidth / innerHeight; if (aspect < 1.1) pos.sub(t).multiplyScalar(1 + (1.1 - aspect) * 2).add(t);
+  flight = { p0: camera.position.clone(), t0: controls.target.clone(), p1: pos, t1: t.clone(), start: performance.now(), ms };
+}
+
+let focus = [];
+async function runActs(acts, id) {
+  for (const a of acts || []) {
+    if (id !== runId) return;
+    await runAct(a, id);
+  }
+}
+async function runAct(a, id) {
+  if (id !== runId) return;
+  if (a.par) { await Promise.all(a.par.map(x => runAct(x, id))); return; }
+  if (a.wait) { await animate(a.wait, () => {}); return; }
+  if (a.phase) { setPhase(a.phase); return; }
+  if (a.mem !== undefined) { activeCells.add(a.mem); flash('MEM:' + a.mem); render(S); await animate(350, () => {}); return; }
+  if (a.traffic) { traffic(id); await animate(4500, () => {}); return; }
+  if (a.move) {
+    const path = polyline(route(a.move));
+    const speed = a.fast ? 13 : 7.5;
+    const ms = Math.max(a.fast ? 450 : 750, path.total / speed * 1000);
+    const pk = makePacket(a.label, a.kind);
+    const ok = await animate(ms, k => pk.set(path.at(smooth(k))));
+    pk.dispose();
+    if (!ok || id !== runId) return;
+    const dest = a.move.split('>')[1];
+    if (!a.demo) { if (a.set) applySet(S, a.set); render(S); }
+    flash(a.flashTo || dest);
+    return;
+  }
+  if (a.set) { applySet(S, a.set); render(S); if (a.flash) flash(a.flash); await animate(250, () => {}); }
+}
+function traffic(id) {
+  // a queue of instructions and data squeezing along the data bus
+  const items = [['LDA 5', 'instr'], [12, 'data'], ['ADD 6', 'instr'], [30, 'data'], ['STO 7', 'instr'], [42, 'data'], ['HLT', 'instr']];
+  items.forEach(([label, kind], i) => setTimeout(() => {
+    if (id !== runId) return;
+    const toMem = kind === 'data' && label === 42;
+    const path = polyline(route(toMem ? 'MDR>MEM:7' : `MEM:${[0, 5, 1, 6, 2, 7, 3][i]}>MDR`));
+    const pk = makePacket(label, kind);
+    animate(2600, k => pk.set(path.at(k))).then(() => pk.dispose());
+  }, i * 420));
+}
+
+function setPhase(p) {
+  $('phases').classList.toggle('show', !!p);
+  document.querySelectorAll('#phases span').forEach(s => s.classList.toggle('on', s.dataset.p === p));
+}
+function go(i) {
+  if (i < 0 || i >= STEPS.length) return;
+  const id = ++runId; cancelAll(); clearTimeout(autoTimer);
+  current = i; const step = STEPS[i];
+  S = structuredClone(i > 0 ? SNAP[i - 1] : S0);
+  activeCells.clear(); render(S);
+  focus = step.focus || [];
+  setPhase(step.startPhase || step.phase || null);
+  $('cycle').textContent = step.cycle || ''; $('cycle').style.opacity = step.cycle ? 1 : 0;
+  const kicker = step.kicker || ({ fetch: 'Fetch', decode: 'Decode', execute: 'Execute' })[step.phase];
+  $('storyBody').innerHTML = `<div class="fade-in"><div class="kicker">${kicker}</div><h2>${step.title}</h2><div class="text">${step.text}</div></div>`;
+  $('count').textContent = `${i + 1} / ${STEPS.length}`;
+  $('bar').style.width = `${((i + 1) / STEPS.length) * 100}%`;
+  $('prev').disabled = i === 0; $('prev').style.opacity = i === 0 ? .35 : 1;
+  const last = i === STEPS.length - 1;
+  $('next').textContent = last ? '↺ Start again' : 'Next →';
+  flyTo(step.view);
+  (async () => {
+    await animate(step.acts ? 900 : 0, () => {});
+    if (id !== runId) return;
+    await runActs(step.acts, id);
+    if (id !== runId) return;
+    if (step.phase) setPhase(step.phase);
+    if (!step.acts?.some(a => a.demo || a.traffic)) { S = structuredClone(SNAP[i]); render(S); }
+    if (autoplay && !last) {
+      const read = Math.min(9000, 2600 + step.text.replace(/<[^>]+>/g, '').length * 28);
+      autoTimer = setTimeout(() => { if (id === runId) go(i + 1); }, read);
+    } else if (last) setAuto(false);
+  })();
+}
+function setAuto(on) { autoplay = on; $('auto').setAttribute('aria-pressed', String(on)); $('auto').textContent = on ? '❚❚ Pause' : '▶ Auto'; }
+$('next').onclick = () => current === STEPS.length - 1 ? go(0) : go(current + 1);
+$('prev').onclick = () => go(current - 1);
+$('auto').onclick = () => { setAuto(!autoplay); if (autoplay) go(current === STEPS.length - 1 ? 0 : current + 1); };
+addEventListener('keydown', e => {
+  if (!$('intro').classList.contains('gone')) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); enter(); } return; }
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); $('next').click(); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); go(current - 1); }
+  if (e.key === 'a' || e.key === 'A') $('auto').click();
+});
+controls.addEventListener('start', () => { flight = null; controls.autoRotate = false; });
+
+function enter() {
+  if ($('intro').classList.contains('gone')) return;
+  $('intro').classList.add('gone'); controls.autoRotate = false;
+  setTimeout(() => { $('story').classList.remove('hidden'); $('legend').style.opacity = 1; }, 900);
+  go(0); flight.ms = 3400;
+}
+$('enter').onclick = enter;
+
+/* =========================================================
+   LOOP
+   ========================================================= */
+const clk = new THREE.Clock();
+render(S);
+function tick() {
+  const dt = Math.min(clk.getDelta(), 0.05), t = clk.elapsedTime, now = performance.now();
+
+  for (const a of [...anims]) {
+    const k = Math.min((now - a.t0) / a.ms, 1); a.fn(k);
+    if (k >= 1) { anims.delete(a); a.res(true); }
+  }
+  if (flight) {
+    const k = Math.min((now - flight.start) / flight.ms, 1), e = k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+    camera.position.lerpVectors(flight.p0, flight.p1, e); controls.target.lerpVectors(flight.t0, flight.t1, e);
+    if (k >= 1) flight = null;
+  }
+  controls.update();
+
+  // glow: focused parts breathe, flashed parts pop
+  const breathe = 0.5 + 0.5 * Math.sin(t * 3.2);
+  const isFocus = ent => focus.some(f =>
+    (f === 'MEM' && cells.some(c => c.box.userData.ent === ent)) ||
+    (f.startsWith('MEM:') && cells[+f.slice(4)].box.userData.ent === ent) ||
+    (pods[f] && pods[f].ent === ent) || (f === 'CU' && cu.userData.ent === ent) || (f === 'ALU' && aluEnt === ent));
+  for (const ent of glowing) {
+    ent.goal = isFocus(ent) ? 0.6 + 0.9 * breathe : 0;
+    ent.glow += (ent.goal - ent.glow) * Math.min(dt * 6, 1);
+    ent.flash = Math.max(0, ent.flash - dt * 1.6);
+    ent.edges.material.color.copy(ent.base).multiplyScalar(ent.k * (1 + ent.glow * 1.2 + ent.flash * 3));
+  }
+  cells.forEach((c, i) => { if (activeCells.has(i)) c.box.userData.ent.edges.material.color.copy(c.box.userData.ent.base).multiplyScalar(4 + breathe * 2); });
+  const busFocus = focus.includes('BUS');
+  lanes.forEach(l => { l.t.offset.x += dt * 0.35 * l.dir * (busFocus ? 2 : 1); l.mat.color.setHex(l.colorHex).multiplyScalar(l.k * (busFocus ? 1.4 + breathe * .8 : 1)); });
+
+  const decoding = STEPS[current]?.phase === 'decode';
+  cuRing.rotation.x = Math.PI / 2 + Math.sin(t * .7) * .25; cuRing.rotation.z += dt * (decoding ? 3 : .6);
+  cuRing2.rotation.y += dt * (decoding ? 4 : .9); cuRing2.rotation.x = t * .5;
+  cuRing.position.y = CU_POS.y + 1.2 + Math.sin(t * 1.4) * .06;
+
+  const pa = pGeo.attributes.position.array;
+  for (let i = 0; i < NP; i++) { pa[i * 3 + 1] += dt * (0.08 + ps[i] * 0.15); if (pa[i * 3 + 1] > 22) pa[i * 3 + 1] = 0; }
+  pGeo.attributes.position.needsUpdate = true;
+
+  composer.render();
+  requestAnimationFrame(tick);
+}
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight);
+});
+$('loading').classList.add('done');
+window.__vn = { go };
+tick();
+</script>
+</body>
+</html>

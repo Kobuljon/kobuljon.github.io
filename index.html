@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Computer Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+  body { min-height: 100vh; overflow-x: hidden; }
+
+  /* quiet circuit-board backdrop */
+  .backdrop { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+  .backdrop::before {
+    content: ""; position: absolute; inset: 0;
+    background-image: radial-gradient(rgba(255,255,255,.07) 1px, transparent 1px);
+    background-size: 28px 28px;
+    mask-image: radial-gradient(ellipse 70% 60% at 70% 30%, #000 10%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse 70% 60% at 70% 30%, #000 10%, transparent 75%);
+  }
+  .backdrop::after {
+    content: ""; position: absolute; width: 900px; height: 900px; right: -260px; top: -380px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(94,230,255,.13), rgba(164,140,255,.06) 40%, transparent 70%);
+    filter: blur(20px);
+  }
+  .backdrop svg { position: absolute; right: 4vw; top: 70px; width: min(520px, 60vw); opacity: .55; }
+  .trace { fill: none; stroke: rgba(94,230,255,.35); stroke-width: 1.2; stroke-dasharray: 4 10; animation: flow 3s linear infinite; }
+  .trace.a { stroke: rgba(255,181,71,.35); animation-duration: 4s; }
+  .trace.v { stroke: rgba(164,140,255,.4); animation-direction: reverse; }
+  @keyframes flow { to { stroke-dashoffset: -56; } }
+
+  main { position: relative; z-index: 1; max-width: 980px; margin: 0 auto; padding: 72px 24px 80px; }
+  header .kicker { margin-bottom: 22px; display: flex; gap: 10px; align-items: center; }
+  header .kicker::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--cyan); box-shadow: 0 0 12px var(--cyan); }
+  h1 { font-size: clamp(44px, 8vw, 92px); line-height: .95; font-weight: 600; letter-spacing: -.035em; }
+  h1 em { font-style: normal; color: transparent; -webkit-text-stroke: 1.2px rgba(234,240,247,.55); }
+  .lede { max-width: 520px; margin-top: 24px; color: var(--muted); font-size: 17px; line-height: 1.6; }
+
+  .section-label { margin: 84px 0 14px; display: flex; justify-content: space-between; align-items: baseline; }
+  .topics { list-style: none; border-top: 1px solid var(--line); }
+  .topics li { border-bottom: 1px solid var(--line); }
+  .topics a {
+    display: grid; grid-template-columns: 56px 64px 1fr auto; align-items: center; gap: 22px;
+    padding: 28px 8px; text-decoration: none; position: relative; transition: background .3s;
+  }
+  .topics a::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--accent, var(--cyan));
+    transform: scaleY(0); transition: transform .35s cubic-bezier(.2,.8,.2,1);
+  }
+  .topics a:hover { background: linear-gradient(90deg, rgba(255,255,255,.035), transparent 70%); }
+  .topics a:hover::before { transform: scaleY(1); }
+  .num { font: 500 13px var(--mono); color: var(--dim); }
+  .ico { width: 56px; height: 56px; border-radius: 14px; display: grid; place-items: center; border: 1px solid var(--line); background: rgba(255,255,255,.02); color: var(--accent, var(--cyan)); transition: transform .4s cubic-bezier(.2,.8,.2,1), border-color .3s; }
+  .topics a:hover .ico { transform: rotate(-6deg) scale(1.06); border-color: var(--accent); }
+  .ico svg { width: 30px; height: 30px; }
+  .t-title { font-size: clamp(20px, 3vw, 27px); font-weight: 500; letter-spacing: -.01em; }
+  .t-desc { color: var(--muted); font-size: 14.5px; margin-top: 6px; line-height: 1.5; }
+  .tag { display: inline-block; margin-top: 10px; font: 500 10.5px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+  .arrow { font-size: 22px; color: var(--dim); transition: transform .35s cubic-bezier(.2,.8,.2,1), color .3s; }
+  .topics a:hover .arrow { transform: translateX(6px); color: var(--ink); }
+
+  footer { margin-top: 64px; color: var(--dim); font: 400 12px var(--mono); }
+
+  @media (max-width: 640px) {
+    main { padding-top: 48px; }
+    .topics a { grid-template-columns: 48px 1fr auto; gap: 14px; padding: 22px 4px; }
+    .num { display: none; }
+    .ico { width: 48px; height: 48px; }
+    .backdrop svg { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="backdrop" aria-hidden="true">
+  <svg viewBox="0 0 520 360">
+    <rect x="200" y="120" width="120" height="120" rx="10" fill="none" stroke="rgba(255,255,255,.18)"/>
+    <rect x="222" y="142" width="76" height="76" rx="4" fill="rgba(94,230,255,.05)" stroke="rgba(94,230,255,.3)"/>
+    <path class="trace" d="M200 150 H120 L90 120 H0"/>
+    <path class="trace" d="M200 180 H0"/>
+    <path class="trace" d="M200 210 H120 L90 240 H0"/>
+    <path class="trace a" d="M320 150 H400 L430 120 H520"/>
+    <path class="trace a" d="M320 210 H400 L430 240 H520"/>
+    <path class="trace v" d="M245 120 V60 L275 30 V0"/>
+    <path class="trace v" d="M275 240 V300 L245 330 V360"/>
+  </svg>
+</div>
+
+<main>
+  <header>
+    <div class="kicker">Grade 9 · Computer Science</div>
+    <h1>Computer<br><em>Architecture</em></h1>
+    <p class="lede">Explore how a computer really works — from the chip in your hand to the journey of a single instruction through the machine.</p>
+  </header>
+
+  <div class="section-label">
+    <span class="kicker">Topics</span>
+  </div>
+
+  <!--
+    TO ADD A NEW PAGE: copy one <li> ... </li> block below, paste it at the end of the list,
+    then change the link (href), number, title, description and tag.
+    The --accent colour can be any colour, e.g. #7dffb0
+  -->
+  <ol class="topics">
+    <li>
+      <a href="cpu.html" style="--accent: var(--cyan)">
+        <span class="num">01</span>
+        <span class="ico" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="8" y="8" width="16" height="16" rx="2"/><rect x="12" y="12" width="8" height="8" rx="1"/><path d="M12 4v4M16 4v4M20 4v4M12 24v4M16 24v4M20 24v4M4 12h4M4 16h4M4 20h4M24 12h4M24 16h4M24 20h4"/></svg>
+        </span>
+        <span>
+          <div class="t-title">The Central Processing Unit</div>
+          <div class="t-desc">Rotate, zoom and take apart a microprocessor. Click any part to find out what it does.</div>
+          <span class="tag">3D explorer</span>
+        </span>
+        <span class="arrow" aria-hidden="true">→</span>
+      </a>
+    </li>
+    <li>
+      <a href="von-neumann.html" style="--accent: var(--amber)">
+        <span class="num">02</span>
+        <span class="ico" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="7" width="8" height="18" rx="1.5"/><path d="M3 13h8M3 19h8"/><rect x="20" y="9" width="9" height="14" rx="1.5"/><path d="M11 12h9M11 16h9M11 20h9" stroke-dasharray="2 2"/></svg>
+        </span>
+        <span>
+          <div class="t-title">Von Neumann Architecture</div>
+          <div class="t-desc">Step inside the machine and follow a program through fetch, decode and execute.</div>
+          <span class="tag">Immersive journey</span>
+        </span>
+        <span class="arrow" aria-hidden="true">→</span>
+      </a>
+    </li>
+  </ol>
+
+  <footer>Dombit International School · Grade 9</footer>
+</main>
+</body>
+</html>

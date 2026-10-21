@@ -1,0 +1,82 @@
+/* Shared styles for all Computer Architecture pages */
+:root {
+  --bg: #05070b;
+  --panel: rgba(12, 16, 24, 0.72);
+  --panel-solid: #0c1018;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.18);
+  --ink: #eaf0f7;
+  --muted: #8a96a8;
+  --dim: #5b6676;
+  --cyan: #5ee6ff;
+  --amber: #ffb547;
+  --violet: #a48cff;
+  --pink: #ff6fae;
+  --green: #7dffb0;
+  --font: "Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: var(--bg); color: var(--ink); font-family: var(--font); -webkit-font-smoothing: antialiased; }
+a { color: inherit; }
+button { font: inherit; color: inherit; }
+
+/* ---------- full-screen 3D pages ---------- */
+.stage { overflow: hidden; height: 100vh; height: 100dvh; }
+.stage #c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
+
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+  display: flex; align-items: center; gap: 14px; padding: 16px 18px;
+  pointer-events: none;
+}
+.topbar > * { pointer-events: auto; }
+.back {
+  font: 500 12px var(--mono); letter-spacing: .02em; color: var(--muted); text-decoration: none;
+  padding: 8px 13px; border: 1px solid var(--line); border-radius: 999px;
+  background: rgba(8, 11, 17, .6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  transition: color .2s, border-color .2s;
+}
+.back:hover { color: var(--ink); border-color: var(--line-strong); }
+.page-title { font-weight: 600; font-size: 15px; letter-spacing: .01em; text-shadow: 0 1px 12px #000; }
+.page-title span { color: var(--muted); font-weight: 400; }
+
+.glass {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 18px;
+  backdrop-filter: blur(16px) saturate(140%); -webkit-backdrop-filter: blur(16px) saturate(140%);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .45);
+}
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 38px; padding: 0 14px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--line-strong); background: rgba(255, 255, 255, .04);
+  font: 500 13px var(--font); color: var(--ink); transition: background .2s, border-color .2s, transform .1s;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn:hover { background: rgba(255, 255, 255, .09); }
+.btn:active { transform: scale(.97); }
+.btn.primary { background: var(--ink); color: #05070b; border-color: var(--ink); }
+.btn.primary:hover { background: #fff; }
+.btn.icon { width: 38px; padding: 0; }
+.btn[aria-pressed="true"] { border-color: var(--cyan); color: var(--cyan); }
+
+.kicker { font: 500 11px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.mono { font-family: var(--mono); }
+
+.hint {
+  position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 4;
+  font: 400 11px var(--mono); color: var(--dim); letter-spacing: .06em; white-space: nowrap; pointer-events: none;
+  transition: opacity .6s;
+}
+
+.loading {
+  position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: var(--bg);
+  font: 400 12px var(--mono); color: var(--muted); letter-spacing: .14em; transition: opacity .8s;
+}
+.loading.done { opacity: 0; pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}

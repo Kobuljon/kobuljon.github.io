@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The CPU · 3D Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+  /* ---- parts navigator (left) ---- */
+  .parts {
+    position: fixed; left: 18px; top: 76px; z-index: 6; width: 212px; padding: 16px 14px;
+    max-height: calc(100dvh - 180px); overflow-y: auto; scrollbar-width: none;
+  }
+  .parts::-webkit-scrollbar { display: none; }
+  .group + .group { margin-top: 14px; }
+  .group .kicker { font-size: 10px; margin: 0 6px 6px; color: var(--dim); }
+  .part-btn {
+    display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+    padding: 7px 8px; border: 0; background: none; border-radius: 8px; cursor: pointer;
+    font-size: 13.5px; color: var(--muted); transition: background .2s, color .2s;
+  }
+  .part-btn::before { content: ""; width: 6px; height: 6px; border-radius: 2px; background: var(--c, var(--dim)); opacity: .55; flex: none; transition: opacity .2s, box-shadow .2s; }
+  .part-btn:hover { color: var(--ink); background: rgba(255,255,255,.04); }
+  .part-btn.active { color: var(--ink); background: rgba(255,255,255,.07); }
+  .part-btn.active::before { opacity: 1; box-shadow: 0 0 10px var(--c); }
+  .regs { display: flex; flex-wrap: wrap; gap: 5px; padding: 2px 6px; }
+  .reg-btn {
+    font: 500 11.5px var(--mono); padding: 5px 8px; border-radius: 7px; cursor: pointer;
+    border: 1px solid var(--line); background: none; color: var(--muted); transition: all .2s;
+  }
+  .reg-btn:hover { color: var(--ink); border-color: var(--line-strong); }
+  .reg-btn.active { color: #05070b; background: var(--cyan); border-color: var(--cyan); }
+
+  /* ---- info panel (right) ---- */
+  .info {
+    position: fixed; right: 18px; top: 76px; z-index: 6; width: 352px; padding: 22px 22px 20px;
+    max-height: calc(100dvh - 180px); overflow-y: auto; scrollbar-width: thin;
+  }
+  .info .kicker { display: flex; align-items: center; gap: 8px; }
+  .info .swatch { width: 8px; height: 8px; border-radius: 2px; background: var(--c, var(--cyan)); box-shadow: 0 0 10px var(--c, var(--cyan)); }
+  .info h2 { font-size: 25px; line-height: 1.15; font-weight: 600; letter-spacing: -.015em; margin: 10px 0 12px; }
+  .info p { color: #c5cedb; font-size: 14.5px; line-height: 1.62; }
+  .info ul { list-style: none; margin-top: 16px; border-top: 1px solid var(--line); }
+  .info li { font-size: 13.5px; line-height: 1.5; color: var(--muted); padding: 10px 0 10px 18px; border-bottom: 1px solid var(--line); position: relative; }
+  .info li::before { content: "›"; position: absolute; left: 2px; color: var(--c, var(--cyan)); font-weight: 700; }
+  .info li b { color: var(--ink); font-weight: 500; }
+  .perf {
+    display: none; margin-top: 16px; padding: 10px 12px; border-radius: 10px;
+    font-size: 12.5px; line-height: 1.5; color: #ffe2b0; background: rgba(255,181,71,.08); border: 1px solid rgba(255,181,71,.22);
+  }
+  .perf.show { display: block; }
+  .info .fade { animation: rise .45s cubic-bezier(.2,.8,.2,1); }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  /* ---- bottom controls ---- */
+  .controls {
+    position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%); z-index: 6;
+    display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 14px;
+  }
+  .slider { display: flex; align-items: center; gap: 10px; padding: 0 8px; font: 500 11px var(--mono); color: var(--muted); letter-spacing: .08em; }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 130px; height: 4px; border-radius: 4px; background: rgba(255,255,255,.12); outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 0 4px rgba(94,230,255,.2); cursor: grab; }
+  input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border: 0; border-radius: 50%; background: var(--ink); cursor: grab; }
+  .sep { width: 1px; height: 22px; background: var(--line); }
+
+  .tip {
+    position: fixed; z-index: 8; pointer-events: none; padding: 6px 10px; border-radius: 8px;
+    font: 500 12px var(--font); background: rgba(5,7,11,.85); border: 1px solid var(--line-strong);
+    transform: translate(14px, 14px); opacity: 0; transition: opacity .15s; white-space: nowrap;
+  }
+  .tip.show { opacity: 1; }
+
+  .collapse { display: none; }
+
+  @media (max-width: 860px) {
+    .parts {
+      top: 62px; left: 0; right: 0; width: auto; max-height: none; border-radius: 0; border-left: 0; border-right: 0;
+      display: flex; gap: 6px; overflow-x: auto; padding: 8px 12px; align-items: center; background: rgba(8,11,17,.75);
+    }
+    .group { display: contents; }
+    .group .kicker { display: none; }
+    .part-btn, .reg-btn { width: auto; white-space: nowrap; flex: none; border: 1px solid var(--line); padding: 6px 10px; border-radius: 999px; font-size: 12.5px; }
+    .regs { display: contents; }
+    .info { top: auto; bottom: 10px; left: 10px; right: 10px; width: auto; max-height: 40dvh; padding: 16px 18px; }
+    .info.min { max-height: 64px; overflow: hidden; }
+    .info h2 { font-size: 20px; margin: 6px 0 8px; }
+    .collapse { display: grid; position: absolute; top: 10px; right: 10px; }
+    .controls { top: 114px; bottom: auto; transform: translateX(-50%) scale(.9); }
+    .controls .hide-m { display: none; }
+    input[type=range] { width: 90px; }
+    .hint { display: none; }
+    .page-title span { display: none; }
+    .btn { white-space: nowrap; }
+  }
+</style>
+</head>
+<body class="stage">
+<div class="loading" id="loading">BUILDING THE CHIP…</div>
+<canvas id="c" tabindex="0" aria-label="Interactive 3D model of a CPU"></canvas>
+
+<header class="topbar">
+  <a class="back" href="index.html">← Computer Architecture</a>
+  <div class="page-title">The CPU <span>/ microprocessor</span></div>
+</header>
+
+<nav class="parts glass" id="parts" aria-label="Parts of the CPU"></nav>
+
+<aside class="info glass" id="info" aria-live="polite">
+  <button class="btn icon collapse" id="collapse" aria-label="Minimise panel">–</button>
+  <div id="infoBody"></div>
+</aside>
+
+<div class="controls glass">
+  <button class="btn primary" id="openBtn">Open the chip</button>
+  <div class="slider hide-m"><span>LAYERS</span><input type="range" id="explode" min="0" max="100" value="0" aria-label="Separate the layers"></div>
+  <div class="sep hide-m"></div>
+  <button class="btn" id="resetBtn" title="Reset view">Reset view</button>
+  <button class="btn icon" id="spinBtn" aria-pressed="true" title="Auto-rotate">⟳</button>
+</div>
+
+<div class="hint" id="hint">DRAG TO ROTATE · SCROLL OR PINCH TO ZOOM · CLICK ANY PART</div>
+<div class="tip" id="tip"></div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+/* =========================================================
+   CONTENT — what each part is (edit text here)
+   ========================================================= */
+const C = { cyan: '#5ee6ff', amber: '#ffb547', violet: '#a48cff', teal: '#43d6c5', green: '#7dffb0', pink: '#ff6fae', silver: '#c4cad3', gold: '#e0ae4f', blue: '#6aa8ff' };
+
+const PARTS = {
+  overview: { name: 'The CPU', kicker: 'Microprocessor', c: C.cyan,
+    body: 'The <b>Central Processing Unit</b> (also called the processor or microprocessor) carries out the instructions of a program and processes data. It does this billions of times every second by repeating the <b>fetch – decode – execute</b> cycle.',
+    facts: ['Made on a single chip of silicon containing <b>billions of transistors</b>', 'Contains the <b>Control Unit</b>, the <b>ALU</b>, <b>registers</b>, <b>cache</b> and a <b>clock</b>', 'Talks to memory using three buses: <b>address</b>, <b>data</b> and <b>control</b>'],
+    note: 'Start by pressing <b>Open the chip</b>, or click any part of the model.' },
+  ihs: { name: 'Heat spreader', title: 'Heat spreader (the lid)', kicker: 'Outside the chip', c: C.silver,
+    body: 'The metal lid protects the fragile silicon underneath and spreads its heat evenly, so a heatsink and fan can carry it away. A busy CPU gets hot — too much heat makes it slow down or can damage it.',
+    facts: ['It does not process anything — it <b>protects and cools</b>', 'Faster clock speeds and more cores produce <b>more heat</b>'] },
+  pins: { name: 'Pins', title: 'Package & pins', kicker: 'Outside the chip', c: C.gold,
+    body: 'The CPU sits on a green base called the substrate. Hundreds of gold pins underneath connect it to the motherboard, so signals on the buses can travel between the CPU, main memory and other devices.',
+    facts: ['Rotate the model to look <b>underneath</b> the chip', 'The coloured tracks on the base are the <b>buses</b> leaving the CPU'] },
+  die: { name: 'Silicon die', kicker: 'On the die', c: C.blue, inside: true,
+    body: 'This small square of silicon is the real processor. It is packed with billions of microscopic transistors — tiny switches turning on and off — organised into cores, cache and control circuits.',
+    facts: ['Everything you can click on the die is part of the CPU', 'Modern transistors are only a few <b>nanometres</b> wide'] },
+  core: { name: 'Core', title: 'Processor core', kicker: 'On the die', c: '#7f9bbf', inside: true, perf: true,
+    body: 'A core is a complete processing unit with its own <b>Control Unit</b>, <b>ALU</b> and <b>registers</b>. Each core can fetch, decode and execute instructions by itself. This CPU is <b>quad-core</b> — it has four.',
+    facts: ['More cores → more instructions can be processed <b>at the same time</b>', 'Doubling the cores does <b>not always</b> double the speed: the program must be able to split its work between cores, and cores must communicate with each other'] },
+  cache: { name: 'Cache', title: 'Cache memory', kicker: 'On the die', c: C.teal, inside: true, perf: true,
+    body: 'Cache is a small amount of <b>very fast memory</b> inside the CPU. It keeps copies of frequently used instructions and data, so the CPU doesn\'t have to wait for slower main memory (RAM).',
+    facts: ['<b>L1 cache</b> — tiny and fastest, inside each core', '<b>L3 cache</b> — larger, shared by all the cores', 'More cache → fewer slow trips to RAM → better performance (but cache is expensive)'] },
+  clock: { name: 'Clock', kicker: 'On the die', c: C.green, inside: true, perf: true,
+    body: 'The clock sends out a steady stream of electrical pulses that keep every part of the CPU in step. Each pulse is one <b>clock cycle</b>, and the fetch – decode – execute cycle runs in time with these pulses.',
+    facts: ['Clock speed is measured in hertz: <b>3.2 GHz = 3.2 billion cycles per second</b>', 'Faster clock → more instructions carried out per second', '<b>Overclocking</b> runs a CPU faster than intended — it can overheat and become unstable'] },
+  cu: { name: 'Control Unit', title: 'Control Unit (CU)', kicker: 'Inside a core', c: C.violet, inside: true,
+    body: 'The CU is the manager of the CPU. It controls the fetch – decode – execute cycle: it <b>decodes</b> each instruction and sends <b>control signals</b> to tell the other components what to do, and when.',
+    facts: ['Decodes the instruction held in the <b>CIR</b>', 'Sends signals such as <b>memory read</b> and <b>memory write</b> along the control bus', 'Uses the clock to keep everything synchronised'] },
+  alu: { name: 'ALU', title: 'Arithmetic Logic Unit (ALU)', kicker: 'Inside a core', c: C.amber, inside: true,
+    body: 'The ALU does the calculating. It carries out <b>arithmetic</b> operations such as addition and subtraction, and <b>logic</b> operations such as AND, OR, NOT and comparisons (is A greater than B?).',
+    facts: ['Its symbol is the <b>V-shape</b> you can see on the chip', 'Results are stored temporarily in the <b>Accumulator (ACC)</b>', 'It can also <b>shift</b> binary numbers left or right'] },
+  pc: { name: 'PC', title: 'Program Counter (PC)', kicker: 'Register', c: C.cyan, inside: true,
+    body: 'Holds the <b>address of the next instruction</b> to be fetched from memory. After each fetch, the PC is <b>incremented</b> (increased by 1) so it points to the following instruction.',
+    facts: ['It holds an <b>address</b>, not an instruction', 'Its value is copied into the <b>MAR</b> at the start of every fetch'] },
+  mar: { name: 'MAR', title: 'Memory Address Register (MAR)', kicker: 'Register', c: C.cyan, inside: true,
+    body: 'Holds the <b>address</b> of the memory location that is about to be <b>read from</b> or <b>written to</b>. This address is sent out of the CPU along the address bus.',
+    facts: ['Connected to the <b>address bus</b>', 'Gets its value from the PC (when fetching) or from the instruction (when executing)'] },
+  mdr: { name: 'MDR', title: 'Memory Data Register (MDR)', kicker: 'Register', c: C.cyan, inside: true,
+    body: 'Holds the <b>data or instruction</b> that has just been read from memory, or that is about to be written to memory.',
+    facts: ['Connected to the <b>data bus</b>', 'Can hold <b>data</b> or an <b>instruction</b> — in a von Neumann computer they look the same'] },
+  cir: { name: 'CIR', title: 'Current Instruction Register (CIR)', kicker: 'Register', c: C.cyan, inside: true,
+    body: 'Holds the <b>instruction that is currently being decoded and executed</b>. The instruction is copied into the CIR from the MDR.',
+    facts: ['The CU reads the CIR to <b>decode</b> the instruction', 'An instruction has an <b>opcode</b> (what to do) and an <b>operand</b> (what to do it to)'] },
+  acc: { name: 'ACC', title: 'Accumulator (ACC)', kicker: 'Register', c: C.cyan, inside: true,
+    body: 'Temporarily holds the <b>results of calculations</b> and logic operations carried out by the ALU, ready for the next step.',
+    facts: ['Works closely with the <b>ALU</b>', 'Example: 12 + 30 → the ACC now holds 42'] },
+  buses: { name: 'Buses', title: 'The system bus', kicker: 'Buses', c: '#9fb0c8',
+    body: 'A <b>bus</b> is a set of parallel wires that carries signals between components. The CPU uses three buses to communicate with memory and input/output devices.',
+    facts: ['<b>Address bus</b> — carries addresses, one way', '<b>Data bus</b> — carries data and instructions, both ways', '<b>Control bus</b> — carries control signals, both ways'] },
+  addrbus: { name: 'Address bus', kicker: 'Buses', c: C.blue,
+    body: 'Carries <b>addresses</b> from the CPU (from the MAR) to memory, saying which memory location to use. It is <b>unidirectional</b> — signals only travel one way, out of the CPU.',
+    facts: ['Watch the pulses: they only flow <b>outwards</b>', 'A wider address bus can address <b>more memory locations</b> (e.g. 32 wires → 2³² addresses)'] },
+  databus: { name: 'Data bus', kicker: 'Buses', c: C.amber,
+    body: 'Carries <b>data and instructions</b> between the CPU, memory and input/output devices. It is <b>bidirectional</b> — signals travel both ways.',
+    facts: ['Connected to the <b>MDR</b>', 'Watch the pulses: some flow <b>in</b>, some flow <b>out</b>', 'A wider data bus moves more bits in each transfer'] },
+  ctrlbus: { name: 'Control bus', kicker: 'Buses', c: C.pink,
+    body: 'Carries <b>control signals</b> from the Control Unit — such as <b>memory read</b>, <b>memory write</b> and <b>clock</b> signals — and status signals coming back. It is <b>bidirectional</b>.',
+    facts: ['Makes sure the right component acts at the right time', 'Signals travel <b>both ways</b>'] },
+};
+const GROUPS = [
+  { label: 'Outside', items: ['ihs', 'pins'] },
+  { label: 'On the die', items: ['die', 'core', 'cache', 'clock'] },
+  { label: 'Inside a core', items: ['cu', 'alu'] },
+  { label: 'Registers', regs: ['pc', 'mar', 'mdr', 'cir', 'acc'] },
+  { label: 'Buses', items: ['addrbus', 'databus', 'ctrlbus'] },
+];
+const PERF_NOTE = '⚡ <b>Affects performance.</b> Clock speed, number of cores and cache size are the three main things that decide how fast a CPU is.';
+
+/* =========================================================
+   UI
+   ========================================================= */
+const $ = (id) => document.getElementById(id);
+const nav = $('parts');
+GROUPS.forEach(g => {
+  const d = document.createElement('div'); d.className = 'group';
+  d.innerHTML = `<div class="kicker">${g.label}</div>`;
+  if (g.items) g.items.forEach(k => {
+    const b = document.createElement('button'); b.className = 'part-btn'; b.dataset.k = k;
+    b.style.setProperty('--c', PARTS[k].c); b.textContent = PARTS[k].name; d.appendChild(b);
+  });
+  if (g.regs) {
+    const r = document.createElement('div'); r.className = 'regs';
+    g.regs.forEach(k => { const b = document.createElement('button'); b.className = 'reg-btn'; b.dataset.k = k; b.textContent = PARTS[k].name; r.appendChild(b); });
+    d.appendChild(r);
+  }
+  nav.appendChild(d);
+});
+nav.addEventListener('click', e => { const b = e.target.closest('[data-k]'); if (b) select(b.dataset.k); });
+
+function showInfo(k) {
+  const p = PARTS[k];
+  $('info').style.setProperty('--c', p.c);
+  $('infoBody').innerHTML = `<div class="fade">
+    <div class="kicker"><span class="swatch"></span>${p.kicker}</div>
+    <h2>${p.title || p.name}</h2>
+    <p>${p.body}</p>
+    ${p.facts ? `<ul>${p.facts.map(f => `<li>${f}</li>`).join('')}</ul>` : ''}
+    <div class="perf ${p.perf ? 'show' : ''}">${PERF_NOTE}</div>
+    ${p.note ? `<p style="margin-top:16px;font-size:13px;color:var(--muted)">${p.note}</p>` : ''}
+  </div>`;
+  document.querySelectorAll('[data-k]').forEach(b => b.classList.toggle('active', b.dataset.k === k));
+  $('info').classList.remove('min'); $('collapse').textContent = '–';
+}
+$('collapse').onclick = () => { const m = $('info').classList.toggle('min'); $('collapse').textContent = m ? '+' : '–'; };
+
+/* =========================================================
+   SCENE
+   ========================================================= */
+const fontsReady = Promise.race([
+  Promise.all([document.fonts.load('600 64px "Space Grotesk"'), document.fonts.load('700 40px "JetBrains Mono"')]),
+  new Promise(r => setTimeout(r, 2500)),
+]);
+await fontsReady;
+
+const canvas = $('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x05070b);
+scene.fog = new THREE.FogExp2(0x05070b, 0.022);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.1, 200);
+const HOME = { pos: new THREE.Vector3(10.5, 9, 12.5), target: new THREE.Vector3(0, 0.6, 0) };
+if (innerWidth / innerHeight < 1) HOME.pos.multiplyScalar(1.7);
+camera.position.set(22, 18, 26);
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.07;
+controls.minDistance = 2; controls.maxDistance = 34;
+controls.target.copy(HOME.target);
+controls.autoRotate = true; controls.autoRotateSpeed = 0.5;
+
+scene.add(new THREE.HemisphereLight(0xa9bcff, 0x07080c, 0.55));
+const key = new THREE.DirectionalLight(0xffffff, 1.7); key.position.set(6, 12, 5); scene.add(key);
+const rim = new THREE.DirectionalLight(0x5ee6ff, 1.1); rim.position.set(-9, 4, -7); scene.add(rim);
+const warm = new THREE.DirectionalLight(0xffb070, 0.5); warm.position.set(8, 2, -8); scene.add(warm);
+
+/* ---------- helpers ---------- */
+const pickables = [];
+const byPart = {};
+function tag(mesh, part) {
+  mesh.userData.part = part; pickables.push(mesh);
+  (byPart[part] ||= []).push(mesh);
+  const m = mesh.material;
+  mesh.userData.baseEm = m.emissive ? m.emissive.clone() : null;
+  mesh.userData.baseEI = m.emissiveIntensity ?? 1;
+  mesh.userData.hl = 0;
+  return mesh;
+}
+const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.3, envMapIntensity: 0.6, ...o });
+
+function canvasTex(w, h, draw) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  draw(cv.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+}
+// flat text label lying on a surface
+function label(text, w, h, { color = '#ffffff', font = 'Space Grotesk', weight = 600, scale = 0.62, opacity = 0.92, letter = 0 } = {}) {
+  const px = 220, cw = Math.round(w * px), ch = Math.round(h * px);
+  const tex = canvasTex(cw, ch, (g) => {
+    g.fillStyle = color; g.textAlign = 'center'; g.textBaseline = 'middle';
+    const lines = text.split('\n'); const fs = ch * scale / lines.length;
+    g.font = `${weight} ${fs}px "${font}", ${font === 'JetBrains Mono' ? 'monospace' : 'sans-serif'}`;
+    if ('letterSpacing' in g) g.letterSpacing = `${letter * fs}px`;
+    lines.forEach((l, i) => g.fillText(l, cw / 2, ch / 2 + (i - (lines.length - 1) / 2) * fs * 1.15));
+  });
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; m.raycast = () => {}; m.renderOrder = 2;
+  return m;
+}
+function block(w, h, d, color, part, o = {}) {
+  const g = new RoundedBoxGeometry(w, h, d, 2, Math.min(w, h, d) * 0.18);
+  const mesh = new THREE.Mesh(g, std(color, o));
+  return tag(mesh, part);
+}
+
+/* ---------- the chip ---------- */
+const chip = new THREE.Group(); scene.add(chip);
+const SUB_TOP = 0.36;
+
+// substrate
+const substrate = tag(new THREE.Mesh(new RoundedBoxGeometry(10, 0.36, 10, 2, 0.07),
+  std(0x0d2a25, { roughness: 0.75, metalness: 0.1, map: canvasTex(512, 512, (g, w, h) => {
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(0,0,0,.08)'; g.lineWidth = 2;
+    for (let i = 0; i < 60; i++) { g.beginPath(); const y = Math.random() * h; g.moveTo(0, y); g.lineTo(w, y + (Math.random() - .5) * 60); g.stroke(); }
+  }) })), 'pins');
+substrate.position.y = 0.18; chip.add(substrate);
+
+// pin-1 marker
+const marker = new THREE.Mesh(new THREE.CircleGeometry(0.18, 3), new THREE.MeshStandardMaterial({ color: 0xe0ae4f, metalness: 1, roughness: .3 }));
+marker.rotation.x = -Math.PI / 2; marker.rotation.z = Math.PI / 4; marker.position.set(-4.5, SUB_TOP + 0.003, -4.5); marker.raycast = () => {}; chip.add(marker);
+
+// gold pins underneath
+const gold = std(0xe0ae4f, { metalness: 1, roughness: 0.32, envMapIntensity: 0.7 });
+const pinGeo = new THREE.CylinderGeometry(0.055, 0.055, 0.34, 8);
+const pinPos = [];
+for (let i = 0; i < 22; i++) for (let j = 0; j < 22; j++) {
+  const x = -4.41 + i * 0.42, z = -4.41 + j * 0.42;
+  if (Math.abs(x) < 1.3 && Math.abs(z) < 1.3) continue;
+  pinPos.push([x, z]);
+}
+const pins = new THREE.InstancedMesh(pinGeo, gold, pinPos.length);
+const dummy = new THREE.Object3D();
+pinPos.forEach(([x, z], i) => { dummy.position.set(x, -0.17, z); dummy.updateMatrix(); pins.setMatrixAt(i, dummy.matrix); });
+tag(pins, 'pins'); chip.add(pins);
+
+// small capacitors on the back edge (decoration)
+for (let i = 0; i < 9; i++) {
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.12, 0.18), std(0x8a5a2b, { roughness: .6 }));
+  cap.position.set(-3.2 + i * 0.8, SUB_TOP + 0.06, -4.35); cap.raycast = () => {}; chip.add(cap);
+  [-1, 1].forEach(s => { const e = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.125, 0.185), std(0xd8dde4, { metalness: 1, roughness: .3 })); e.position.set(s * 0.17, 0, 0); e.raycast = () => {}; cap.add(e); });
+}
+
+/* ---------- buses: glowing tracks on the substrate ---------- */
+function flowTexture() {
+  return canvasTex(256, 8, (g, w, h) => {
+    const gr = g.createLinearGradient(0, 0, w, 0);
+    gr.addColorStop(0, 'rgba(255,255,255,0.08)'); gr.addColorStop(0.62, 'rgba(255,255,255,0.08)');
+    gr.addColorStop(0.9, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0.08)');
+    g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  });
+}
+const flowOut = flowTexture(); flowOut.wrapS = THREE.RepeatWrapping; flowOut.repeat.set(2, 1);
+const flowIn = flowTexture(); flowIn.wrapS = THREE.RepeatWrapping; flowIn.repeat.set(-2, 1);
+const flows = [flowOut, flowIn];
+
+function trace(points, color, part, inward) {
+  const path = new THREE.CurvePath();
+  for (let i = 0; i < points.length - 1; i++) path.add(new THREE.LineCurve3(points[i], points[i + 1]));
+  const geo = new THREE.TubeGeometry(path, 64, 0.03, 6, false);
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x0b0f14, emissive: new THREE.Color(color), emissiveIntensity: 2.2, emissiveMap: inward ? flowIn : flowOut, roughness: .4 }));
+  tag(mesh, part); chip.add(mesh);
+  const end = points[points.length - 1];
+  const pad = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.02, 0.22), gold); pad.position.copy(end); pad.raycast = () => {}; chip.add(pad);
+}
+const y = SUB_TOP + 0.02;
+const V = (a, b, c) => new THREE.Vector3(a, b, c);
+const BUS = [
+  { part: 'addrbus', color: C.blue, side: [-1, 0], dirs: [0, 0, 0, 0, 0, 0] },
+  { part: 'databus', color: C.amber, side: [0, 1], dirs: [0, 1, 0, 1, 0, 1] },
+  { part: 'ctrlbus', color: C.pink, side: [1, 0], dirs: [1, 0, 1, 0, 1, 0] },
+];
+BUS.forEach(b => {
+  for (let j = 0; j < 6; j++) {
+    const o = -1.5 + j * 0.6; const s = 1.33;
+    const raw = [[2.3, o], [3.3, o], [3.9, o * s], [4.78, o * s]];
+    const pts = raw.map(([a, c]) => b.side[0] ? V(a * b.side[0], y, c) : V(c, y, a * b.side[1]));
+    trace(pts, b.color, b.part, b.dirs[j]);
+  }
+  // an easier invisible "hit area" for clicking the thin tracks
+  const hit = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.2, 4.4), new THREE.MeshBasicMaterial({ visible: false }));
+  if (b.side[0]) hit.position.set(4.15 * b.side[0], y, 0); else { hit.rotation.y = Math.PI / 2; hit.position.set(0, y, 4.15); }
+  tag(hit, b.part); chip.add(hit);
+  // printed label on the board
+  const l = label(PARTS[b.part].name.toUpperCase(), 2.4, 0.3, { color: b.color, font: 'JetBrains Mono', weight: 500, opacity: .75, letter: .15 });
+  if (b.side[0]) l.position.set(3.7 * b.side[0], SUB_TOP + 0.004, -2.75);
+  else { l.position.set(-2.95, SUB_TOP + 0.004, 3.7); l.rotation.z = Math.PI / 2; }
+  chip.add(l);
+});
+
+/* ---------- silicon die ---------- */
+const dieGroup = new THREE.Group(); chip.add(dieGroup);
+const dieTex = canvasTex(1024, 1024, (g, w, h) => {
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, h);
+  g.strokeStyle = 'rgba(30,60,110,.35)'; g.lineWidth = 1;
+  for (let i = 0; i < w; i += 8) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, h); g.stroke(); g.beginPath(); g.moveTo(0, i); g.lineTo(w, i); g.stroke(); }
+});
+const die = tag(new THREE.Mesh(new RoundedBoxGeometry(5.2, 0.14, 5.2, 2, 0.03),
+  std(0x2a3550, { map: dieTex, metalness: 0.55, roughness: 0.35, envMapIntensity: 0.5 })), 'die');
+die.position.y = SUB_TOP + 0.07; dieGroup.add(die);
+const DIE_TOP = SUB_TOP + 0.14;
+
+const explodables = []; // { obj, base, lift }
+function lift(obj, amount) { explodables.push({ obj, base: obj.position.y, lift: amount }); }
+
+// four cores
+function aluGeometry() {
+  const s = new THREE.Shape();
+  s.moveTo(-0.34, 0.24); s.lineTo(-0.06, 0.24); s.lineTo(0, 0.13); s.lineTo(0.06, 0.24); s.lineTo(0.34, 0.24);
+  s.lineTo(0.17, -0.24); s.lineTo(-0.17, -0.24); s.closePath();
+  const g = new THREE.ExtrudeGeometry(s, { depth: 0.16, bevelEnabled: true, bevelThickness: 0.015, bevelSize: 0.015, bevelSegments: 2 });
+  g.rotateX(-Math.PI / 2); g.translate(0, 0, 0); return g;
+}
+const regKeys = ['pc', 'mar', 'mdr', 'cir', 'acc'];
+const coreCenters = [[-1.55, -1.45], [0.15, -1.45], [-1.55, 0.25], [0.15, 0.25]];
+coreCenters.forEach(([cx, cz], ci) => {
+  const core = new THREE.Group(); core.position.set(cx, DIE_TOP, cz); dieGroup.add(core);
+  const plate = block(1.6, 0.05, 1.6, 0x1b2638, 'core', { metalness: .6, roughness: .35, emissive: new THREE.Color(0x0a1424) });
+  plate.position.y = 0.025; core.add(plate);
+  const cl = label(`CORE ${ci + 1}`, 0.9, 0.12, { color: '#9fb0c8', font: 'JetBrains Mono', weight: 500, opacity: .6, letter: .2 });
+  cl.position.set(-0.32, 0.052, 0.74); core.add(cl);
+
+  const cu = block(0.68, 0.16, 0.5, 0x6d5cf0, 'cu', { emissive: new THREE.Color(0x2a1d8a), roughness: .35 });
+  cu.position.set(-0.37, 0.05 + 0.08, -0.43); core.add(cu); lift(cu, 0.32);
+  const cuL = label('CU', 0.5, 0.3, { opacity: .95 }); cuL.position.y = 0.081; cu.add(cuL);
+
+  const alu = new THREE.Mesh(aluGeometry(), std(0xff9f2e, { emissive: new THREE.Color(0x7a3d00), roughness: .35 }));
+  tag(alu, 'alu'); alu.position.set(0.37, 0.05, -0.36); core.add(alu); lift(alu, 0.42);
+  const aluL = label('ALU', 0.36, 0.16, { color: '#2a1500', opacity: .9 }); aluL.position.set(0, 0.18, -0.04); alu.add(aluL);
+
+  regKeys.forEach((k, i) => {
+    const r = block(0.25, 0.13, 0.25, 0x23b6d6, k, { emissive: new THREE.Color(0x05475a), roughness: .3, metalness: .4 });
+    r.position.set(-0.56 + i * 0.28, 0.05 + 0.065, 0.13); core.add(r); lift(r, 0.52 + i * 0.03);
+    const rl = label(PARTS[k].name, 0.24, 0.14, { font: 'JetBrains Mono', weight: 700, color: '#ffffff', scale: .7 }); rl.position.y = 0.066; r.add(rl);
+  });
+
+  const l1 = block(1.42, 0.07, 0.3, 0x1c8f86, 'cache', { emissive: new THREE.Color(0x06403b), roughness: .4 });
+  l1.position.set(0, 0.05 + 0.035, 0.55); core.add(l1); lift(l1, 0.2);
+  const l1L = label('L1 CACHE', 0.9, 0.16, { font: 'JetBrains Mono', weight: 500, opacity: .85, letter: .15 }); l1L.position.y = 0.036; l1.add(l1L);
+  core.userData.lift = 0.15; lift(core, 0.15);
+});
+
+// shared L3 cache
+const l3Tex = canvasTex(256, 640, (g, w, h) => {
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, h);
+  g.fillStyle = 'rgba(0,40,40,.35)';
+  for (let x = 6; x < w; x += 20) for (let yy = 6; yy < h; yy += 20) g.fillRect(x, yy, 14, 14);
+});
+const l3 = block(1.3, 0.09, 3.3, 0x2bb3a6, 'cache', { map: l3Tex, emissive: new THREE.Color(0x06403b), roughness: .4 });
+l3.position.set(1.8, DIE_TOP + 0.045, -0.6); dieGroup.add(l3); lift(l3, 0.25);
+const l3L = label('L3 CACHE\n(shared)', 1.0, 0.5, { font: 'JetBrains Mono', weight: 500, color: '#032b28', opacity: .9 }); l3L.position.y = 0.046; l3.add(l3L);
+
+// bus interface
+const bi = block(3.3, 0.07, 1.05, 0x39445a, 'buses', { metalness: .6, roughness: .35 });
+bi.position.set(-0.7, DIE_TOP + 0.035, 1.85); dieGroup.add(bi); lift(bi, 0.2);
+const biL = label('BUS INTERFACE', 2.2, 0.26, { font: 'JetBrains Mono', weight: 500, opacity: .7, letter: .18 }); biL.position.y = 0.036; bi.add(biL);
+
+// clock
+const clockGroup = new THREE.Group(); clockGroup.position.set(1.8, DIE_TOP, 1.85); dieGroup.add(clockGroup); lift(clockGroup, 0.3);
+const cbase = block(1.3, 0.06, 1.05, 0x222a36, 'clock', { metalness: .6, roughness: .35 }); cbase.position.y = 0.03; clockGroup.add(cbase);
+const crystal = tag(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.14, 32), std(0xdfe5ec, { metalness: 1, roughness: .2 })), 'clock');
+crystal.position.set(0, 0.13, -0.08); clockGroup.add(crystal);
+const ringMat = new THREE.MeshStandardMaterial({ color: 0x0b0f14, emissive: new THREE.Color(C.green), emissiveIntensity: 2 });
+const ring = tag(new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.025, 12, 64), ringMat), 'clock');
+ring.rotation.x = -Math.PI / 2; ring.position.set(0, 0.08, -0.08); clockGroup.add(ring);
+const clockL = label('CLOCK · 3.2 GHz', 1.15, 0.15, { font: 'JetBrains Mono', weight: 500, color: C.green, opacity: .9 }); clockL.position.set(0, 0.061, 0.38); clockGroup.add(clockL);
+
+/* ---------- heat spreader (lid) ---------- */
+const ihsGroup = new THREE.Group(); chip.add(ihsGroup);
+const ihsMat = std(0xaab1bb, { metalness: 1, roughness: 0.36, transparent: true, envMapIntensity: 0.55 });
+const ihs = tag(new THREE.Mesh(new RoundedBoxGeometry(7, 0.5, 7, 3, 0.12), ihsMat), 'ihs');
+ihs.position.y = SUB_TOP + 0.25; ihsGroup.add(ihs);
+const engr = label('ARCH·9\n4-CORE  3.2 GHz', 4.6, 1.5, { color: '#4b525c', weight: 600, opacity: .55, scale: .62 });
+engr.position.y = SUB_TOP + 0.505; ihsGroup.add(engr);
+const engr2 = label('GRADE 9 · COMPUTER SCIENCE', 4.6, 0.3, { color: '#5a616b', font: 'JetBrains Mono', weight: 500, opacity: .5, letter: .12 });
+engr2.position.set(0, SUB_TOP + 0.505, 2.6); ihsGroup.add(engr2);
+
+/* ---------- surroundings ---------- */
+const glow = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshBasicMaterial({
+  transparent: true, depthWrite: false, map: canvasTex(512, 512, (g, w, h) => {
+    const r = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+    r.addColorStop(0, 'rgba(70,140,200,.22)'); r.addColorStop(.35, 'rgba(60,80,160,.07)'); r.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = r; g.fillRect(0, 0, w, h);
+  }) }));
+glow.rotation.x = -Math.PI / 2; glow.position.y = -1.2; glow.raycast = () => {}; scene.add(glow);
+const ringFloor = new THREE.Mesh(new THREE.RingGeometry(9.5, 9.53, 128), new THREE.MeshBasicMaterial({ color: 0x5ee6ff, transparent: true, opacity: .12 }));
+ringFloor.rotation.x = -Math.PI / 2; ringFloor.position.y = -1.19; ringFloor.raycast = () => {}; scene.add(ringFloor);
+
+const dustGeo = new THREE.BufferGeometry(); const N = 380; const dp = new Float32Array(N * 3);
+for (let i = 0; i < N; i++) { dp[i * 3] = (Math.random() - .5) * 40; dp[i * 3 + 1] = Math.random() * 16 - 2; dp[i * 3 + 2] = (Math.random() - .5) * 40; }
+dustGeo.setAttribute('position', new THREE.BufferAttribute(dp, 3));
+const dust = new THREE.Points(dustGeo, new THREE.PointsMaterial({ color: 0x8fdfff, size: 0.04, transparent: true, opacity: .5, depthWrite: false }));
+scene.add(dust);
+
+/* ---------- post-processing ---------- */
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.5, 0.45, 1.0);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+/* =========================================================
+   INTERACTION
+   ========================================================= */
+let explode = 0, explodeTarget = 0;
+const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+function applyExplode(e) {
+  const s = ease(Math.min(Math.max(e, 0), 1));
+  ihsGroup.position.y = s * 4.6;
+  ihsGroup.rotation.x = -s * 0.22;
+  ihsMat.opacity = 1 - s * 0.8;
+  engr.material.opacity = 0.55 * (1 - s * 0.8); engr2.material.opacity = 0.5 * (1 - s * 0.8);
+  ihsMat.depthWrite = s < 0.5;
+  dieGroup.position.y = s * 1.5;
+  explodables.forEach(x => x.obj.position.y = x.base + s * x.lift);
+}
+function setExplodeTarget(v) {
+  explodeTarget = v;
+  $('openBtn').textContent = v > 0.5 ? 'Close the chip' : 'Open the chip';
+}
+$('openBtn').onclick = () => setExplodeTarget(explodeTarget > 0.5 ? 0 : 1);
+$('explode').addEventListener('input', e => { explode = explodeTarget = e.target.value / 100; setExplodeTarget(explodeTarget); });
+
+// camera flights
+let flight = null;
+function flyTo(pos, target, dur = 1.3) {
+  flight = { p0: camera.position.clone(), t0: controls.target.clone(), p1: pos.clone(), t1: target.clone(), start: performance.now(), dur: dur * 1000 };
+}
+function stopSpin() { controls.autoRotate = false; $('spinBtn').setAttribute('aria-pressed', 'false'); }
+$('spinBtn').onclick = () => { controls.autoRotate = !controls.autoRotate; $('spinBtn').setAttribute('aria-pressed', String(controls.autoRotate)); };
+$('resetBtn').onclick = () => { select('overview'); flyTo(HOME.pos, HOME.target); };
+
+let selected = 'overview', hovered = null;
+function select(k, mesh) {
+  selected = k; showInfo(k);
+  if (k === 'overview') return;
+  stopSpin();
+  const p = PARTS[k];
+  let eGoal = explodeTarget;
+  if (p.inside && explodeTarget < 0.6) eGoal = 1;
+  if (k === 'ihs') eGoal = 0;
+  if (eGoal !== explodeTarget) setExplodeTarget(eGoal);
+
+  // where will the part be once the layers have finished moving?
+  const target = mesh || (byPart[k] && byPart[k][0]);
+  if (!target) return;
+  applyExplode(eGoal); chip.updateMatrixWorld(true);
+  const box = new THREE.Box3();
+  if (['ihs', 'pins', 'die', 'addrbus', 'databus', 'ctrlbus', 'buses'].includes(k)) byPart[k].forEach(m => box.expandByObject(m));
+  else box.setFromObject(target);
+  applyExplode(explode); chip.updateMatrixWorld(true);
+
+  const c = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3()).length();
+  let dist = THREE.MathUtils.clamp(size * 2.4, 3.4, 17);
+  if (camera.aspect < 1) dist *= 1 + (1 - camera.aspect) * 1.2;
+  if (k === 'pins') dist = 15;
+  const dir = camera.position.clone().sub(controls.target).normalize();
+  dir.y = k === 'pins' ? -0.75 : Math.max(dir.y, 0.62);
+  if (k === 'pins') { dir.x = dir.x || .5; }
+  dir.normalize();
+  flyTo(c.clone().add(dir.multiplyScalar(dist)), c);
+}
+
+// picking
+const ray = new THREE.Raycaster(); const ndc = new THREE.Vector2();
+const tip = $('tip');
+let lastPointer = null, downAt = null;
+function pick(x, y) {
+  ndc.set((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const hits = ray.intersectObjects(pickables, false);
+  for (const h of hits) {
+    if (h.object.userData.part === 'ihs' && explode > 0.45) continue;
+    return h.object;
+  }
+  return null;
+}
+canvas.addEventListener('pointermove', e => { lastPointer = { x: e.clientX, y: e.clientY, type: e.pointerType }; });
+canvas.addEventListener('pointerleave', () => { lastPointer = null; hovered = null; tip.classList.remove('show'); canvas.style.cursor = ''; });
+canvas.addEventListener('pointerdown', e => { downAt = { x: e.clientX, y: e.clientY, t: performance.now() }; $('hint').style.opacity = 0; });
+canvas.addEventListener('pointerup', e => {
+  if (!downAt) return;
+  const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y);
+  if (moved < 6 && performance.now() - downAt.t < 600) {
+    const m = pick(e.clientX, e.clientY);
+    if (m) select(m.userData.part, m);
+  }
+  downAt = null;
+});
+controls.addEventListener('start', () => { flight = null; stopSpin(); });
+
+/* =========================================================
+   LOOP
+   ========================================================= */
+const HL = new THREE.Color(0x7fe9ff);
+const clock = new THREE.Clock();
+let intro = { start: performance.now(), dur: 2600 };
+flyTo(HOME.pos, HOME.target, 2.6);
+showInfo('overview');
+
+function tick() {
+  const raw = clock.getDelta(), dt = Math.min(raw, 0.05), t = clock.elapsedTime;
+
+  // layers
+  if (Math.abs(explode - explodeTarget) > 0.0005) {
+    explode += Math.sign(explodeTarget - explode) * Math.min(Math.abs(explodeTarget - explode), Math.min(raw, 0.25) * 0.9);
+    $('explode').value = Math.round(explode * 100);
+  }
+  applyExplode(explode);
+
+  // camera flight
+  if (flight) {
+    const k = Math.min((performance.now() - flight.start) / flight.dur, 1), e = ease(k);
+    camera.position.lerpVectors(flight.p0, flight.p1, e);
+    controls.target.lerpVectors(flight.t0, flight.t1, e);
+    if (k >= 1) flight = null;
+  }
+  controls.update();
+
+  // hover
+  if (lastPointer && lastPointer.type === 'mouse' && !downAt) {
+    const m = pick(lastPointer.x, lastPointer.y);
+    hovered = m ? m.userData.part : null;
+    if (m) {
+      tip.textContent = PARTS[hovered].title || PARTS[hovered].name;
+      tip.style.left = lastPointer.x + 'px'; tip.style.top = lastPointer.y + 'px'; tip.classList.add('show');
+      canvas.style.cursor = 'pointer';
+    } else { tip.classList.remove('show'); canvas.style.cursor = ''; }
+  }
+
+  // highlight
+  const pulse = 0.55 + 0.45 * Math.sin(t * 4);
+  for (const m of pickables) {
+    const k = m.userData.part;
+    const goal = k === selected ? 0.22 + 0.25 * pulse : (k === hovered ? 0.4 : 0);
+    m.userData.hl += (goal - m.userData.hl) * Math.min(dt * 10, 1);
+    const mat = m.material; if (!m.userData.baseEm) continue;
+    if (mat.emissiveMap) mat.emissiveIntensity = m.userData.baseEI + m.userData.hl * 4;
+    else mat.emissive.copy(m.userData.baseEm).lerp(HL, m.userData.hl * (k === 'pins' ? 0.25 : 0.5));
+  }
+
+  // living details
+  flowOut.offset.x -= dt * 0.55; flowIn.offset.x -= dt * 0.55;
+  const tickPulse = Math.pow(0.5 + 0.5 * Math.sin(t * Math.PI * 2 * 1.6), 6);
+  if (selected !== 'clock' && hovered !== 'clock') ringMat.emissiveIntensity = 0.6 + tickPulse * 3;
+  dust.rotation.y = t * 0.01;
+  glow.material.opacity = 0.8 + 0.2 * Math.sin(t * .7);
+
+  composer.render();
+  requestAnimationFrame(tick);
+}
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight);
+});
+addEventListener('keydown', e => {
+  if (e.key === 'o' || e.key === 'O') $('openBtn').click();
+  if (e.key === 'r' || e.key === 'R') $('resetBtn').click();
+});
+
+$('loading').classList.add('done');
+window.__cpu = { select, setExplodeTarget };
+tick();
+</script>
+</body>
+</html>
