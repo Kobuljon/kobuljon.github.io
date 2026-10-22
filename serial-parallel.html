@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Serial vs Parallel · Journey</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+  .se { color: var(--amber); } .pa { color: var(--violet); } .bad { color: #ff6b6b; } .ok { color: var(--green); }
+  .story .text .se, .story .text .pa, .story .text .bad, .story .text .ok { font-weight: 600; }
+
+  .intro { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; text-align: center; padding: 24px;
+    background: radial-gradient(ellipse at center, rgba(5,7,11,.35), rgba(5,7,11,.92) 70%); transition: opacity 1.2s ease, visibility 1.2s; }
+  .intro.gone { opacity: 0; visibility: hidden; }
+  .intro h1 { font-size: clamp(38px, 7vw, 84px); line-height: .98; letter-spacing: -.035em; font-weight: 600; margin: 18px 0 20px; }
+  .intro h1 em { font-style: normal; color: transparent; -webkit-text-stroke: 1.2px rgba(234,240,247,.6); }
+  .intro p { max-width: 520px; margin: 0 auto 30px; color: var(--muted); font-size: 16.5px; line-height: 1.6; }
+  .intro .btn.primary { height: 48px; padding: 0 26px; font-size: 15px; border-radius: 999px; box-shadow: 0 0 40px rgba(255,181,71,.22); }
+  .intro .keys { margin-top: 22px; font: 400 11px var(--mono); color: var(--dim); letter-spacing: .1em; }
+
+  .dist { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 9; display: flex; gap: 4px; padding: 5px; border-radius: 999px; opacity: 0; transition: opacity .6s; }
+  .dist.show { opacity: 1; }
+  .dist span { font: 500 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; padding: 8px 14px; border-radius: 999px; color: var(--dim); transition: all .4s; white-space: nowrap; }
+  .dist span.on { color: #05070b; background: var(--pc); box-shadow: 0 0 22px var(--pc); }
+
+  .story { position: fixed; left: 18px; bottom: 18px; z-index: 8; width: min(450px, calc(100vw - 36px)); padding: 22px 22px 18px; transition: opacity .6s, transform .6s; max-height: calc(100dvh - 100px); overflow-y: auto; }
+  .story.hidden { opacity: 0; transform: translateY(20px); pointer-events: none; }
+  .story h2 { font-size: 24px; line-height: 1.15; font-weight: 600; letter-spacing: -.015em; margin: 8px 0 10px; }
+  .story .text { color: #c5cedb; font-size: 15px; line-height: 1.62; }
+  .story .text b { color: var(--ink); font-weight: 600; }
+  .story .text ul { list-style: none; margin-top: 4px; }
+  .story .text li { padding: 4px 0 4px 16px; position: relative; font-size: 14px; }
+  .story .text li::before { content: ""; position: absolute; left: 0; top: 12px; width: 6px; height: 6px; border-radius: 2px; background: var(--amber); }
+  .eq { font: 500 13.5px var(--mono); background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 10px; line-height: 1.75; color: var(--ink); }
+  .cmp { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+  .cmp th { font: 700 12px var(--mono); text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line-strong); }
+  .cmp td { padding: 6px 8px; color: var(--muted); border-bottom: 1px solid var(--line); vertical-align: top; }
+  .cmp td:first-child { color: var(--dim); font: 400 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; padding-left: 0; }
+  .story .row { display: flex; align-items: center; gap: 8px; margin-top: 18px; }
+  .story .row .spacer { flex: 1; }
+  .story .count { font: 400 11px var(--mono); color: var(--dim); letter-spacing: .08em; }
+  .progress { height: 2px; background: var(--line); margin-top: 14px; border-radius: 2px; overflow: hidden; }
+  .progress i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--amber), var(--violet)); transition: width .6s cubic-bezier(.2,.8,.2,1); }
+  .fade-in { animation: rise .5s cubic-bezier(.2,.8,.2,1); }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .try { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .try input { flex: 1 1 120px; min-width: 0; height: 40px; border-radius: 10px; border: 1px solid var(--line-strong); background: rgba(255,255,255,.04); color: var(--ink);
+    font: 700 16px var(--mono); letter-spacing: .16em; text-transform: uppercase; padding: 0 12px; outline: none; }
+  .try input:focus { border-color: var(--amber); }
+  .seg { display: flex; border: 1px solid var(--line-strong); border-radius: 10px; overflow: hidden; }
+  .seg button { height: 38px; padding: 0 12px; border: 0; background: none; color: var(--muted); font: 500 12px var(--mono); cursor: pointer; }
+  .seg button.on { background: rgba(255,255,255,.12); color: var(--ink); }
+  .try .btn { height: 40px; }
+  .try.busy { opacity: .5; pointer-events: none; }
+  .linkbtn { color: var(--amber); text-decoration: none; font-weight: 500; }
+  .linkbtn:hover { text-decoration: underline; }
+
+  @media (max-width: 760px) {
+    .page-title { display: none; }
+    .dist { top: 60px; }
+    .story { left: 8px; right: 8px; bottom: 8px; width: auto; padding: 16px 16px 14px; max-height: 52dvh; }
+    .story h2 { font-size: 20px; }
+    .story .text { font-size: 14px; }
+  }
+</style>
+</head>
+<body class="stage">
+<div class="loading" id="loading">LAYING THE CABLES…</div>
+<canvas id="c" tabindex="0" aria-label="3D journey comparing serial and parallel data transmission"></canvas>
+
+<header class="topbar">
+  <a class="back" href="index.html">← Computer Architecture</a>
+  <div class="page-title">Serial vs Parallel <span>/ data transmission</span></div>
+</header>
+
+<div class="dist glass" id="dist" aria-hidden="true">
+  <span data-d="short" style="--pc: var(--green)">Short distance</span>
+  <span data-d="long" style="--pc: var(--pink)">Long distance</span>
+</div>
+
+<section class="intro" id="intro">
+  <div>
+    <div class="kicker">An immersive journey</div>
+    <h1><em>Serial</em> vs<br>parallel</h1>
+    <p>Every photo, message and song travels as bits. Stand beside two data highways — one lane or eight — and race them to find out which is faster, which is more reliable, and why.</p>
+    <button class="btn primary" id="enter">Start the race</button>
+    <div class="keys">← → TO MOVE · SPACE FOR NEXT · DRAG TO LOOK AROUND</div>
+  </div>
+</section>
+
+<section class="story glass hidden" id="story" aria-live="polite">
+  <div id="storyBody"></div>
+  <div class="row">
+    <button class="btn icon" id="prev" aria-label="Previous step">←</button>
+    <button class="btn primary" id="next">Next →</button>
+    <button class="btn" id="auto" aria-pressed="false" title="Play automatically">▶ Auto</button>
+    <span class="spacer"></span>
+    <span class="count" id="count"></span>
+  </div>
+  <div class="progress"><i id="bar"></i></div>
+</section>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const $ = id => document.getElementById(id);
+await Promise.race([
+  Promise.all([document.fonts.load('600 64px "Space Grotesk"'), document.fonts.load('700 64px "JetBrains Mono"'), document.fonts.load('400 32px "JetBrains Mono"')]),
+  new Promise(r => setTimeout(r, 2500)),
+]);
+
+/* =========================================================
+   SETTINGS
+   ========================================================= */
+const COL = { cyan: 0x5ee6ff, amber: 0xffb547, violet: 0xa48cff, pink: 0xff6fae, blue: 0x6aa8ff, green: 0x7dffb0, red: 0xff5a5a };
+const X0 = -8;                         // where the senders are
+const LEN = { short: 16, long: 44 };   // track length (short = inside a computer, long = a cable)
+const SPEED = 8, GAP = 1.0, TICK = GAP / SPEED; // one clock tick puts one bit (serial) or one byte (parallel) on the wires
+const SKEW = [1, 0.985, 1.02, 0.993, 1.025, 0.988, 1.01, 0.98]; // tiny speed differences between the 8 parallel wires
+const SZ = 3.3;                        // z of the serial wire
+const PZ = i => -0.6 - i * 0.5;        // z of parallel wire i
+const PMID = -2.35;
+const bitsOf = ch => ch.charCodeAt(0).toString(2).padStart(8, '0').split('').map(Number);
+const printable = n => (n >= 32 && n < 127) ? String.fromCharCode(n) : '?';
+
+/* =========================================================
+   SCENE
+   ========================================================= */
+const canvas = $('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x04060a);
+scene.fog = new THREE.FogExp2(0x04060a, 0.018);
+const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 400);
+camera.position.set(-30, 30, 50);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.06;
+controls.minDistance = 2.5; controls.maxDistance = 80; controls.maxPolarAngle = Math.PI * 0.495;
+controls.target.set(0, 1, 0); controls.autoRotate = true; controls.autoRotateSpeed = 0.3;
+scene.add(new THREE.HemisphereLight(0x8fa8ff, 0x05060a, 0.8));
+const dl = new THREE.DirectionalLight(0xffffff, 1.3); dl.position.set(5, 12, 8); scene.add(dl);
+
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const glowColor = (hex, k = 2.2) => new THREE.Color(hex).multiplyScalar(k);
+const hex = c => '#' + new THREE.Color(c).getHexString();
+function canvasTex(w, h, draw) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const g = cv.getContext('2d'); draw && draw(g, w, h);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  return { cv, g, t };
+}
+function rr(g, x, y, w, h, r) { g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); }
+const MONO = '"JetBrains Mono", ui-monospace, monospace';
+function textSprite(text, colorHex, { size = 0.34, bg = 'rgba(6,9,14,.88)', weight = 700 } = {}) {
+  const fs = 64, pad = 30;
+  const tmp = document.createElement('canvas').getContext('2d'); tmp.font = `${weight} ${fs}px ${MONO}`;
+  const w = Math.ceil(tmp.measureText(text).width) + pad * 2, h = fs + 34;
+  const { t } = canvasTex(w, h, g => {
+    if (bg) { rr(g, 2, 2, w - 4, h - 4, h / 2 - 2); g.fillStyle = bg; g.fill(); g.lineWidth = 3; g.strokeStyle = hex(colorHex); g.stroke(); }
+    g.font = `${weight} ${fs}px ${MONO}`; g.fillStyle = bg ? '#ffffff' : hex(colorHex); g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(text, w / 2, h / 2 + 3);
+  });
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true }));
+  s.scale.set(size * w / h, size, 1); s.renderOrder = 20; return s;
+}
+function floorText(text, w, h, colorHex, opacity = 0.75) {
+  const px = 160;
+  const { t } = canvasTex(Math.round(w * px), Math.round(h * px), (g, cw, ch) => {
+    g.font = `500 ${ch * 0.62}px ${MONO}`; g.fillStyle = hex(colorHex); g.textBaseline = 'middle';
+    if ('letterSpacing' in g) g.letterSpacing = `${ch * 0.12}px`;
+    g.fillText(text, 4, ch / 2);
+  });
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; return m;
+}
+function glassBox(w, h, d, edgeHex) {
+  const body = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 2, Math.min(w, h, d) * 0.1),
+    new THREE.MeshStandardMaterial({ color: 0x121c2c, emissive: 0x060b14, roughness: 0.35, metalness: 0.45 }));
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w, h, d)), new THREE.LineBasicMaterial({ color: glowColor(edgeHex, 1.6) }));
+  edges.scale.setScalar(0.995); body.add(edges); body.userData.edges = edges; body.userData.c = edgeHex; return body;
+}
+
+/* ---------- ground ---------- */
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, uniforms: { uColor: { value: new THREE.Color(0x3d5a9a) }, uC: { value: new THREE.Vector2(0, 0) } },
+  vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+  fragmentShader: `uniform vec3 uColor; uniform vec2 uC; varying vec3 vW;
+    float grid(vec2 p, float s){ vec2 q = p / s; vec2 g = abs(fract(q - .5) - .5) / fwidth(q); return 1. - min(min(g.x, g.y), 1.); }
+    void main(){ float d = length(vW.xz - uC); float fade = 1. - smoothstep(10., 46., d);
+      float l = grid(vW.xz, 1.) * .2 + grid(vW.xz, 5.) * .42; gl_FragColor = vec4(uColor * l * fade, l * fade); }`,
+}));
+ground.rotation.x = -Math.PI / 2; scene.add(ground);
+
+/* ---------- the two highways ---------- */
+// wires are unit-length boxes scaled to the current track length
+function wire(z, c, thick = 0.07) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(1, thick, thick), new THREE.MeshBasicMaterial({ color: glowColor(c, 0.9) }));
+  m.position.set(0, 0.22, z); scene.add(m); return m;
+}
+const sWire = wire(SZ, COL.amber, 0.09);
+const pWires = Array.from({ length: 8 }, (_, i) => wire(PZ(i), COL.violet));
+const sSend = glassBox(2.2, 1.8, 1.6, COL.amber); sSend.position.set(X0 - 1.5, 0.9, SZ); scene.add(sSend);
+const sRecv = glassBox(2.2, 1.8, 1.6, COL.amber); scene.add(sRecv);
+const pSend = glassBox(2.2, 1.8, 4.6, COL.violet); pSend.position.set(X0 - 1.5, 0.9, PMID); scene.add(pSend);
+const pRecv = glassBox(2.2, 1.8, 4.6, COL.violet); scene.add(pRecv);
+const sLbl = floorText('SERIAL  ·  1 data wire  ·  one bit at a time', 7.4, 0.36, COL.amber, .85); scene.add(sLbl);
+const pLbl = floorText('PARALLEL  ·  8 data wires  ·  a whole byte at a time', 8.4, 0.36, COL.violet, .85); scene.add(pLbl);
+const distLbl = floorText('', 1, 1, COL.green, 0); scene.add(distLbl);
+const tagS = textSprite('SENDER', COL.amber, { size: 0.3, bg: null }); scene.add(tagS);
+const tagSR = textSprite('RECEIVER', COL.amber, { size: 0.3, bg: null }); scene.add(tagSR);
+const tagP = textSprite('SENDER', COL.violet, { size: 0.3, bg: null }); scene.add(tagP);
+const tagPR = textSprite('RECEIVER', COL.violet, { size: 0.3, bg: null }); scene.add(tagPR);
+// wire number markers at the parallel sender
+for (let i = 0; i < 8; i++) { const t = floorText(String(i + 1), 0.4, 0.3, COL.violet, .6); t.position.set(X0 - 0.2, 0.03, PZ(i)); scene.add(t); }
+
+let curLen = LEN.short;
+function layout(L) {
+  curLen = L;
+  sWire.scale.x = L; sWire.position.x = X0 + L / 2;
+  pWires.forEach(w => { w.scale.x = L; w.position.x = X0 + L / 2; });
+  sRecv.position.set(X0 + L + 1.5, 0.9, SZ); pRecv.position.set(X0 + L + 1.5, 0.9, PMID);
+  sLbl.position.set(X0 + 3.9, 0.03, SZ + 0.75); pLbl.position.set(X0 + 4.4, 0.03, PZ(7) - 0.55);
+  tagS.position.set(X0 - 1.5, 2.2, SZ + 0.9); tagSR.position.set(X0 + L + 1.5, 2.2, SZ + 0.9);
+  tagP.position.set(X0 - 1.5, 2.2, 0.15); tagPR.position.set(X0 + L + 1.5, 2.2, 0.15);
+  // boards stand just outside the sender (left) and receiver (right), tilted towards the viewer
+  boards.sS.mesh.position.set(X0 - 5.4, 1.5, SZ); boards.sR.mesh.position.set(X0 + L + 5.4, 1.5, SZ);
+  boards.pS.mesh.position.set(X0 - 5.4, 1.5, PMID); boards.pR.mesh.position.set(X0 + L + 5.4, 1.5, PMID);
+  uses.s.mesh.position.set(X0 + L / 2, 3.4, SZ + 3.4); uses.p.mesh.position.set(X0 + L / 2, 3.4, PMID - 3.2);
+  ground.material.uniforms.uC.value.set(X0 + L / 2, 0);
+}
+
+/* ---------- boards ---------- */
+function board(c, w = 4.6, h = 2.2) {
+  const d = canvasTex(Math.round(w * 160), Math.round(h * 160));
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: d.t, transparent: true, color: 0xeeeeee }));
+  m.rotation.x = -0.55; scene.add(m); return { ...d, mesh: m, c, drawn: null };
+}
+function drawBoard(b, title, rows) { // rows: [{t, c?, big?}]
+  const key = title + JSON.stringify(rows); if (b.drawn === key) return; b.drawn = key;
+  const { g, cv, t } = b, w = cv.width, h = cv.height; g.clearRect(0, 0, w, h);
+  g.fillStyle = 'rgba(6,9,14,.82)'; rr(g, 0, 0, w, h, 26); g.fill(); g.strokeStyle = hex(b.c) + '77'; g.lineWidth = 3; rr(g, 2, 2, w - 4, h - 4, 24); g.stroke();
+  g.textBaseline = 'middle'; g.fillStyle = hex(b.c); g.font = `700 30px ${MONO}`; g.fillText(title, 28, 40);
+  let y = 100;
+  rows.forEach(r => { const fs = r.big ? 62 : 34; g.fillStyle = r.c || '#ffffff'; g.font = `${r.big ? 700 : 500} ${fs}px ${MONO}`; g.fillText(r.t, 28, y + (r.big ? 10 : 0)); y += fs + (r.big ? 30 : 16); });
+  t.needsUpdate = true;
+}
+const boards = { sS: board(COL.amber), sR: board(COL.amber), pS: board(COL.violet), pR: board(COL.violet) };
+function useBoard(c, title, lines) {
+  const b = board(c, 7, 2.4);
+  const { g, cv, t } = b, w = cv.width, h = cv.height;
+  g.fillStyle = 'rgba(6,9,14,.86)'; rr(g, 0, 0, w, h, 28); g.fill(); g.strokeStyle = hex(c); g.lineWidth = 4; rr(g, 2, 2, w - 4, h - 4, 26); g.stroke();
+  g.textBaseline = 'middle'; g.fillStyle = hex(c); g.font = `700 40px ${MONO}`; g.fillText(title, 32, 52);
+  lines.forEach((l, i) => { g.fillStyle = '#e8eef6'; g.font = `500 36px ${MONO}`; g.fillText('›  ' + l, 32, 124 + i * 58); });
+  t.needsUpdate = true; b.mesh.visible = false; return b;
+}
+const uses = {
+  s: useBoard(COL.amber, 'SERIAL IS USED FOR…', ['USB cables (Universal SERIAL Bus)', 'Ethernet & the internet', 'Long distances, modern fast links']),
+  p: useBoard(COL.violet, 'PARALLEL IS USED FOR…', ['Buses inside the computer (CPU ↔ RAM)', 'Connections inside chips', 'Old printer cables (short)']),
+};
+layout(LEN.short);
+
+/* ---------- bits ---------- */
+const bitTex = v => canvasTex(128, 128, (g, w, h) => { g.fillStyle = v ? '#e9fcff' : '#3a4454'; g.font = `700 92px ${MONO}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(v), w / 2, h / 2 + 4); }).t;
+const bitGeo = new RoundedBoxGeometry(0.42, 0.42, 0.42, 2, 0.06);
+const MAT = {
+  1: new THREE.MeshStandardMaterial({ color: 0x0b2a33, emissive: new THREE.Color(COL.cyan), emissiveIntensity: 1.6, emissiveMap: bitTex(1), roughness: .3 }),
+  0: new THREE.MeshStandardMaterial({ color: 0x1a2232, map: bitTex(0), roughness: .4, metalness: .3 }),
+  bad: new THREE.MeshStandardMaterial({ color: 0x2a0b10, emissive: new THREE.Color(COL.red), emissiveIntensity: 1.6, emissiveMap: bitTex(1), roughness: .3 }),
+};
+const haloTex = canvasTex(128, 128, (g, w, h) => { const r = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+  r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(.25, 'rgba(255,255,255,.35)'); r.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = r; g.fillRect(0, 0, w, h); }).t;
+
+/* ---------- atmosphere + post ---------- */
+const NP = 700, pp = new Float32Array(NP * 3), ps = new Float32Array(NP);
+for (let i = 0; i < NP; i++) { pp[i * 3] = (Math.random() - .5) * 110 + 14; pp[i * 3 + 1] = Math.random() * 22; pp[i * 3 + 2] = (Math.random() - .5) * 70; ps[i] = Math.random(); }
+const pGeo = new THREE.BufferGeometry(); pGeo.setAttribute('position', new THREE.BufferAttribute(pp, 3));
+scene.add(new THREE.Points(pGeo, new THREE.PointsMaterial({ map: haloTex, color: 0xffd9a0, size: 0.12, transparent: true, opacity: .45, depthWrite: false, blending: THREE.AdditiveBlending })));
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.8, 0.5, 1.0));
+composer.addPass(new OutputPass());
+
+/* =========================================================
+   TRANSMISSION
+   ========================================================= */
+const anims = new Set();
+const animate = (ms, fn = () => {}) => new Promise(res => anims.add({ t0: performance.now(), ms, fn, res }));
+const temp = new Set();
+function cancelAll() { anims.forEach(a => a.res(false)); anims.clear(); temp.forEach(o => scene.remove(o)); temp.clear(); }
+let runId = 0;
+
+// Work out what the receiver will actually read (it samples all 8 wires on each tick)
+function plan(track, text, { skew = false, cross = false, L }) {
+  const chars = text.split(''); const bits = [];
+  if (track === 'serial') chars.forEach((ch, j) => bitsOf(ch).forEach((v, b) => bits.push({ lane: -1, start: (j * 8 + b) * TICK, f: 1, v, byte: j, pos: b })));
+  else chars.forEach((ch, j) => bitsOf(ch).forEach((v, b) => {
+    let flipAt = null;
+    if (cross && v === 0) { // crosstalk: a 1 on a neighbouring wire can "leak" in
+      const nb = bitsOf(ch); const near = (nb[b - 1] || 0) + (nb[b + 1] || 0);
+      if (near && ((j * 7 + b * 13) % 5) < 2) flipAt = 0.35 + ((j * 3 + b * 5) % 5) * 0.1;
+    }
+    bits.push({ lane: b, start: j * TICK, f: skew ? SKEW[b] : 1, v, byte: j, pos: b, flipAt });
+  }));
+  bits.forEach(x => { x.arrive = x.start + L / (SPEED * x.f); x.vOut = x.flipAt != null ? 1 : x.v; });
+  let received = [];
+  if (track === 'serial') received = chars.map((ch, j) => ({ code: ch.charCodeAt(0), at: (j * 8 + 7) * TICK + L / SPEED }));
+  else chars.forEach((ch, j) => {
+    const tj = j * TICK + L / SPEED; let code = 0;
+    for (let b = 0; b < 8; b++) {
+      const got = bits.filter(x => x.lane === b && x.arrive <= tj + 1e-6);
+      code |= (got.length ? got[got.length - 1].vOut : 0) << (7 - b);
+    }
+    received.push({ code, at: tj });
+  });
+  const ticks = track === 'serial' ? chars.length * 8 : chars.length;
+  const end = Math.max(...bits.map(x => x.arrive)) + 0.3;
+  return { bits, received, ticks, end, chars };
+}
+
+async function transmit(track, text, opts, id) {
+  const L = curLen, p = plan(track, text, { ...opts, L });
+  const send = track === 'serial' ? boards.sS : boards.pS, recv = track === 'serial' ? boards.sR : boards.pR;
+  const meshes = p.bits.map(x => { const m = new THREE.Mesh(bitGeo, MAT[x.v]); m.visible = false; scene.add(m); temp.add(m); return m; });
+  const sparks = [];
+  const bin = p.chars.map(ch => bitsOf(ch).join('')).join(' ');
+  let shownTick = -1, got = 0;
+  const showRecv = () => {
+    const rows = p.received.slice(0, got);
+    const ok = rows.every((r, j) => r.code === p.chars[j].charCodeAt(0));
+    drawBoard(recv, 'RECEIVED', [
+      { t: rows.map(r => r.code.toString(2).padStart(8, '0')).join(' ') || '…', c: '#9fb0c8' },
+      { t: rows.map(r => printable(r.code)).join('') || ' ', big: true, c: ok ? '#7dffb0' : '#ff6b6b' },
+      ...(got === p.received.length ? [{ t: ok ? '✓ correct' : '✗ data corrupted!', c: ok ? '#7dffb0' : '#ff6b6b' }] : []),
+    ]);
+  };
+  showRecv();
+  const ok = await animate(p.end * 1000, k => {
+    const t = k * p.end;
+    const tick = Math.min(p.ticks, Math.floor(t / TICK) + 1);
+    if (tick !== shownTick) { shownTick = tick; drawBoard(send, 'SENDING', [{ t: bin, c: '#9fb0c8' }, { t: text, big: true }, { t: `clock ticks: ${tick} / ${p.ticks}`, c: track === 'serial' ? '#ffb547' : '#a48cff' }]); }
+    p.bits.forEach((x, i) => {
+      const m = meshes[i];
+      if (t < x.start || t > x.arrive) { m.visible = false; return; }
+      const prog = (t - x.start) / (x.arrive - x.start);
+      m.visible = true;
+      const z = x.lane < 0 ? SZ : PZ(x.lane);
+      let jit = 0;
+      if (opts.cross && x.lane >= 0) jit = Math.sin(t * 40 + i) * 0.05;
+      m.position.set(X0 + prog * curLen, 0.5 + Math.sin(prog * Math.PI * 8 + i) * 0.03, z + jit);
+      if (x.flipAt != null && prog >= x.flipAt && m.material !== MAT.bad) {
+        m.material = MAT.bad;
+        const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, color: COL.red, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
+        s.position.copy(m.position); s.scale.setScalar(1.6); scene.add(s); temp.add(s); sparks.push({ s, t0: t });
+      }
+    });
+    sparks.forEach(sp => { const a = t - sp.t0; sp.s.material.opacity = Math.max(0, 1 - a * 2); sp.s.scale.setScalar(1.6 + a * 3); });
+    while (got < p.received.length && t >= p.received[got].at) { got++; showRecv(); (track === 'serial' ? sRecv : pRecv).userData.flash = 1; }
+  });
+  meshes.forEach(m => { scene.remove(m); temp.delete(m); });
+  if (!ok || id !== runId) return null;
+  got = p.received.length; showRecv();
+  return p;
+}
+async function setLength(target, id) {
+  const from = curLen; if (from === target) return;
+  await animate(2200, k => layout(from + (target - from) * (k * k * (3 - 2 * k))));
+  layout(target);
+}
+
+/* =========================================================
+   STATE & STEPS
+   ========================================================= */
+const idle = (title) => [{ t: '' }, { t: title, big: true, c: '#5b6676' }];
+const S0 = { dist: 'short', uses: false, focus: null,
+  sS: ['READY', idle('—')], sR: ['RECEIVED', idle('—')], pS: ['READY', idle('—')], pR: ['RECEIVED', idle('—')] };
+const done = (bin, txt, ok = true, extra) => [{ t: bin, c: '#9fb0c8' }, { t: txt, big: true, c: ok ? '#7dffb0' : '#ff6b6b' }, { t: extra || (ok ? '✓ correct' : '✗ data corrupted!'), c: ok ? '#7dffb0' : '#ff6b6b' }];
+const sent = (txt, ticks, c) => [{ t: txt.split('').map(ch => bitsOf(ch).join('')).join(' '), c: '#9fb0c8' }, { t: txt, big: true }, { t: `clock ticks: ${ticks} / ${ticks}`, c }];
+const binOf = t => t.split('').map(ch => bitsOf(ch).join('')).join(' ');
+
+const STEPS = [
+  { view: 'overview', kicker: 'Prologue', title: 'Moving bits from A to B',
+    text: 'Everything a computer sends — text, photos, video — travels as <b>bits</b>: 1s and 0s. There are two ways to send them along wires:<br><br><span class="se">Serial</span> — <b>one bit at a time</b> along a single wire.<br><span class="pa">Parallel</span> — <b>several bits at the same time</b>, each on its own wire.',
+    state: {} },
+  { view: 'senders', kicker: 'The data', title: 'One letter = one byte',
+    text: 'Let\'s send the letter <b>C</b>. In the computer it is stored as a byte — <b>8 bits</b>:<div class="eq">C → 0 1 0 0 0 0 1 1</div>The <span class="se">serial</span> sender has <b>1 wire</b> for data. The <span class="pa">parallel</span> sender has <b>8 wires</b> — one for each bit.',
+    state: { sS: ['SENDING', [{ t: binOf('C'), c: '#9fb0c8' }, { t: 'C', big: true }]], pS: ['SENDING', [{ t: binOf('C'), c: '#9fb0c8' }, { t: 'C', big: true }]] } },
+  { view: 'serial', kicker: 'Serial transmission', title: 'Single file', focus: 'serial',
+    text: 'In <span class="se">serial transmission</span> the bits travel <b>one after another</b> down a single wire — like cars in one lane.<br><br>Sending one byte takes <b>8 clock ticks</b>: one tick per bit.',
+    acts: [{ send: 'serial', text: 'C' }],
+    state: { sS: ['SENDING', sent('C', 8, '#ffb547')], sR: ['RECEIVED', done(binOf('C'), 'C')] } },
+  { view: 'parallel', kicker: 'Parallel transmission', title: 'Side by side', focus: 'parallel',
+    text: 'In <span class="pa">parallel transmission</span> all 8 bits travel <b>at the same time</b>, side by side, each on its own wire — like an 8-lane motorway.<br><br>A whole byte arrives in just <b>1 clock tick</b>.',
+    acts: [{ send: 'parallel', text: 'C' }],
+    state: { pS: ['SENDING', sent('C', 1, '#a48cff')], pR: ['RECEIVED', done(binOf('C'), 'C')] } },
+  { view: 'overview', kicker: 'Race 1 · short distance', title: 'Parallel wins the sprint',
+    text: 'Both send the word <b>CAT</b> (3 bytes = 24 bits) over a <b>short distance</b>.<div class="eq">Serial: 24 bits → 24 clock ticks<br>Parallel: 3 bytes → 3 clock ticks</div><span class="pa">Parallel</span> finishes first. Over short distances it is <b>faster</b>, because it moves 8 bits with every tick.',
+    acts: [{ race: 'CAT' }],
+    state: { sS: ['SENDING', sent('CAT', 24, '#ffb547')], sR: ['RECEIVED', done(binOf('CAT'), 'CAT')], pS: ['SENDING', sent('CAT', 3, '#a48cff')], pR: ['RECEIVED', done(binOf('CAT'), 'CAT')] } },
+  { view: 'longEnd', kicker: 'Long distance', title: 'Skew: the bits drift apart', dist: 'long', focus: 'parallel',
+    text: 'Now the cable gets much <b>longer</b>. No two wires are perfectly identical, so the bits on some wires travel slightly faster or slower than others.<br><br>Over a long distance the bits of a byte <b>drift apart</b> — this is called <b>skew</b>. The receiver reads all 8 wires at once and gets a mix of bits from different bytes: <span class="bad">the data is corrupted</span>.',
+    acts: [{ len: 'long' }, { send: 'parallel', text: 'CAT', skew: true }],
+    state: { dist: 'long', sS: S0.sS, sR: S0.sR, pS: ['SENDING', sent('CAT', 3, '#a48cff')], pR: ['RECEIVED', null] }, fill: 'skewResult' },
+  { view: 'longEnd', kicker: 'Long distance', title: 'Crosstalk: wires interfere', dist: 'long', focus: 'parallel',
+    text: 'There is a second problem. Wires packed close together act like tiny radio aerials: a signal on one wire can <b>leak into its neighbour</b>. This is <b>crosstalk</b>.<br><br>Watch some <b>0</b>s turn into <span class="bad">1</span>s on the way. The longer the wires, the worse it gets.',
+    acts: [{ send: 'parallel', text: 'CAT', cross: true }],
+    state: { dist: 'long', pR: ['RECEIVED', null] }, fill: 'crossResult' },
+  { view: 'longEnd', kicker: 'Long distance', title: 'Serial goes the distance', dist: 'long', focus: 'serial',
+    text: 'The <span class="se">serial</span> cable has only <b>one data wire</b>, so there is nothing to drift out of step with and no neighbouring data wires to interfere.<br><br>It takes more clock ticks, but the data arrives <span class="ok">correctly</span>. That makes serial <b>more reliable over long distances</b>.',
+    acts: [{ send: 'serial', text: 'CAT' }],
+    state: { dist: 'long', sS: ['SENDING', sent('CAT', 24, '#ffb547')], sR: ['RECEIVED', done(binOf('CAT'), 'CAT')] } },
+  { view: 'ends', kicker: 'Cost', title: 'Counting the wires', dist: 'long', focus: 'wires',
+    text: 'Every extra wire costs money. A parallel cable needs <b>at least 8 data wires</b> plus extras, so it is <b>thicker, heavier and more expensive</b>, with bigger connectors and many pins.<br><br>A serial cable needs far fewer wires, so it is <b>cheaper</b>, thinner and easier to bend.',
+    acts: [{ wires: true }], state: { dist: 'long' } },
+  { view: 'overview', kicker: 'In the real world', title: 'Where is each one used?', dist: 'short', uses: true,
+    text: '<span class="pa">Parallel</span> is used where distances are <b>very short</b> and speed matters — like the <b>buses inside a computer</b> between the CPU and memory.<br><br><span class="se">Serial</span> is used for <b>longer distances</b> — <b>USB</b> (Universal <i>Serial</i> Bus), network cables and the internet. Modern serial links run so fast that serial has replaced parallel in most cables.',
+    acts: [{ len: 'short' }], state: { dist: 'short', uses: true, sS: S0.sS, sR: S0.sR, pS: S0.pS, pR: S0.pR } },
+  { view: 'overview', kicker: 'Summary', title: 'Your turn', dist: 'short', free: true,
+    text: '<table class="cmp"><tr><th></th><th class="se">Serial</th><th class="pa">Parallel</th></tr><tr><td>Bits sent</td><td>One at a time, 1 wire</td><td>Several at once, many wires</td></tr><tr><td>Speed</td><td>Slower over short distances</td><td>Faster over short distances</td></tr><tr><td>Distance</td><td>Reliable over long distances</td><td>Skew &amp; crosstalk over long distances</td></tr><tr><td>Cost</td><td>Cheaper, fewer wires</td><td>More expensive cables</td></tr><tr><td>Used in</td><td>USB, networks</td><td>Buses inside the computer</td></tr></table><div class="try" id="try"><input id="word" maxlength="6" value="HELLO" aria-label="Word to send" autocomplete="off" spellcheck="false"><div class="seg" id="seg"><button data-d="short" class="on">Short</button><button data-d="long">Long</button></div><button class="btn primary" id="go">Race!</button></div><div style="margin-top:12px"><a class="linkbtn" href="index.html">Back to all topics →</a></div>',
+    state: { dist: 'short' } },
+];
+const SNAP = []; { let st = structuredClone(S0); STEPS.forEach(s => { st = { ...structuredClone(st), ...structuredClone(s.state || {}) }; st.uses = !!(s.state && s.state.uses); SNAP.push(st); }); }
+// the skew / crosstalk results are calculated by the same model the animation uses
+[['skewResult', { skew: true }], ['crossResult', { cross: true }]].forEach(([tag, o]) => {
+  const p = plan('parallel', 'CAT', { ...o, L: LEN.long }); const code = p.received.map(r => r.code);
+  const i = STEPS.findIndex(s => s.fill === tag); const ok = code.every((c, j) => c === 'CAT'.charCodeAt(j));
+  const val = ['RECEIVED', done(code.map(c => c.toString(2).padStart(8, '0')).join(' '), code.map(printable).join(''), ok)];
+  SNAP[i].pR = val; for (let k = i + 1; k < SNAP.length && SNAP[k].pR[1] === null; k++) SNAP[k].pR = val;
+});
+
+function applyState(st) {
+  ['sS', 'sR', 'pS', 'pR'].forEach(k => drawBoard(boards[k], st[k][0], st[k][1]));
+  uses.s.mesh.visible = uses.p.mesh.visible = st.uses;
+  document.querySelectorAll('#dist span').forEach(s => s.classList.toggle('on', s.dataset.d === st.dist));
+}
+
+/* =========================================================
+   RUNNING STEPS
+   ========================================================= */
+let current = -1, autoplay = false, autoTimer = null, S = structuredClone(S0), focusOn = null, freePlay = false, busy = false, wirePulse = 0;
+function views() {
+  const L = curLen, cx = X0 + L / 2;
+  return {
+    overview: [V(cx - 6.5, 18, 27), V(cx - 5, -1.5, -0.5)],
+    senders:  [V(X0 - 2, 8.5, 13), V(X0 - 3.5, 0.2, -0.5)],
+    serial:   [V(X0 + 3, 7, 14), V(X0 + 5, -0.3, SZ - 1)],
+    parallel: [V(X0 + 4, 10, 10), V(X0 + 6, -0.6, PMID)],
+    long:     [V(cx - 6, 30, 38), V(cx - 4, -3.5, -0.5)],
+    longEnd:  [V(X0 + L + 3, 12, 20), V(X0 + L - 3, -0.5, -0.5)],
+    ends:     [V(X0 + L + 2, 9, 13), V(X0 + L + 3.5, 0.2, -0.5)],
+  };
+}
+let flight = null;
+function flyTo(name, ms = 1900, Lfor) {
+  const keep = curLen; if (Lfor) curLen = Lfor;
+  const [p, t] = views()[name]; curLen = keep;
+  const pos = p.clone(); const aspect = innerWidth / innerHeight;
+  if (aspect < 1.1) pos.sub(t).multiplyScalar(1 + (1.1 - aspect) * 2).add(t);
+  flight = { p0: camera.position.clone(), t0: controls.target.clone(), p1: pos, t1: t.clone(), start: performance.now(), ms };
+}
+async function runAct(a, id) {
+  if (a.send) { await transmit(a.send, a.text, { skew: a.skew, cross: a.cross }, id); return; }
+  if (a.race) { await Promise.all([transmit('serial', a.race, {}, id), transmit('parallel', a.race, {}, id)]); return; }
+  if (a.len) { await setLength(LEN[a.len], id); return; }
+  if (a.wires) { wirePulse = 1; await animate(2500); return; }
+}
+function go(i) {
+  if (i < 0 || i >= STEPS.length) return;
+  const id = ++runId; cancelAll(); clearTimeout(autoTimer); freePlay = false; busy = false; wirePulse = 0;
+  current = i; const step = STEPS[i];
+  S = structuredClone(i > 0 ? SNAP[i - 1] : S0);
+  // the track length at the start of this step
+  const startDist = i > 0 ? SNAP[i - 1].dist : 'short';
+  layout(LEN[startDist]); S.dist = startDist; applyState(S);
+  if (step.acts?.some(a => a.send || a.race)) {
+    step.acts.forEach(a => { const tr = a.send ? [a.send] : a.race ? ['serial', 'parallel'] : []; tr.forEach(t => { const k = t === 'serial' ? 'sR' : 'pR'; S[k] = ['RECEIVED', idle('…')]; }); });
+    applyState(S);
+  }
+  focusOn = step.focus || null;
+  $('storyBody').innerHTML = `<div class="fade-in"><div class="kicker">${step.kicker}</div><h2>${step.title}</h2><div class="text">${step.text}</div></div>`;
+  bindTry();
+  $('count').textContent = `${i + 1} / ${STEPS.length}`;
+  $('bar').style.width = `${((i + 1) / STEPS.length) * 100}%`;
+  $('prev').disabled = i === 0; $('prev').style.opacity = i === 0 ? .35 : 1;
+  const last = i === STEPS.length - 1;
+  $('next').textContent = last ? '↺ Start again' : 'Next →';
+  flyTo(step.view, 1900, LEN[SNAP[i].dist]);
+  if (step.dist) document.querySelectorAll('#dist span').forEach(s => s.classList.toggle('on', s.dataset.d === step.dist));
+  (async () => {
+    await animate(step.acts ? 1000 : 0);
+    for (const a of step.acts || []) { if (id !== runId) return; await runAct(a, id); }
+    if (id !== runId) return;
+    temp.forEach(o => scene.remove(o)); temp.clear();
+    S = structuredClone(SNAP[i]); layout(LEN[S.dist]); applyState(S);
+    if (step.free) freePlay = true;
+    if (autoplay && !last) {
+      const read = Math.min(9500, 2800 + step.text.replace(/<[^>]+>/g, '').length * 26);
+      autoTimer = setTimeout(() => { if (id === runId) go(i + 1); }, read);
+    } else if (last) setAuto(false);
+  })();
+}
+function setAuto(on) { autoplay = on; $('auto').setAttribute('aria-pressed', String(on)); $('auto').textContent = on ? '❚❚ Pause' : '▶ Auto'; }
+$('next').onclick = () => current === STEPS.length - 1 ? go(0) : go(current + 1);
+$('prev').onclick = () => go(current - 1);
+$('auto').onclick = () => { setAuto(!autoplay); if (autoplay) go(current === STEPS.length - 1 ? 0 : current + 1); };
+addEventListener('keydown', e => {
+  if (!$('intro').classList.contains('gone')) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); enter(); } return; }
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); $('next').click(); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); go(current - 1); }
+  if (e.key === 'a' || e.key === 'A') $('auto').click();
+});
+controls.addEventListener('start', () => { flight = null; controls.autoRotate = false; });
+function enter() {
+  if ($('intro').classList.contains('gone')) return;
+  $('intro').classList.add('gone'); controls.autoRotate = false;
+  setTimeout(() => { $('story').classList.remove('hidden'); $('dist').classList.add('show'); }, 900);
+  go(0); flight.ms = 3400;
+}
+$('enter').onclick = enter;
+
+/* ---------- free play ---------- */
+let freeDist = 'short';
+function bindTry() {
+  const btn = $('go'), inp = $('word'); if (!btn) return;
+  freeDist = 'short';
+  $('seg').addEventListener('click', e => { const b = e.target.closest('button'); if (!b || busy) return; freeDist = b.dataset.d;
+    $('seg').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); });
+  const race = async () => {
+    if (!freePlay || busy) return;
+    const word = inp.value.toUpperCase().replace(/[^A-Z0-9 ]/g, '').slice(0, 6); if (!word) return;
+    busy = true; $('try').classList.add('busy'); const id = runId;
+    document.querySelectorAll('#dist span').forEach(s => s.classList.toggle('on', s.dataset.d === freeDist));
+    if (LEN[freeDist] !== curLen) { flyTo('overview', 2200, LEN[freeDist]); await setLength(LEN[freeDist], id); }
+    else flyTo('overview', 1200);
+    const long = freeDist === 'long';
+    ['sR', 'pR'].forEach(k => drawBoard(boards[k], 'RECEIVED', idle('…')));
+    await Promise.all([transmit('serial', word, {}, id), transmit('parallel', word, { skew: long, cross: long }, id)]);
+    busy = false; $('try')?.classList.remove('busy');
+  };
+  btn.onclick = race; inp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') race(); });
+}
+
+/* =========================================================
+   LOOP
+   ========================================================= */
+const clk = new THREE.Clock();
+applyState(S);
+function tick() {
+  const dt = Math.min(clk.getDelta(), 0.05), t = clk.elapsedTime, now = performance.now();
+  for (const a of [...anims]) { const k = Math.min((now - a.t0) / a.ms, 1); a.fn(k); if (k >= 1) { anims.delete(a); a.res(true); } }
+  if (flight) {
+    const k = Math.min((now - flight.start) / flight.ms, 1), e = k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+    camera.position.lerpVectors(flight.p0, flight.p1, e); controls.target.lerpVectors(flight.t0, flight.t1, e);
+    if (k >= 1) flight = null;
+  }
+  controls.update();
+  const pulse = 0.5 + 0.5 * Math.sin(t * 3.2);
+  const fS = focusOn === 'serial' ? 1 + pulse * .8 : 1, fP = focusOn === 'parallel' ? 1 + pulse * .8 : 1;
+  const wp = focusOn === 'wires' ? pulse : 0;
+  sWire.material.color.setHex(COL.amber).multiplyScalar(0.9 * fS * (1 + wp * 1.5));
+  pWires.forEach((w, i) => w.material.color.setHex(COL.violet).multiplyScalar(0.9 * fP * (1 + (focusOn === 'wires' ? Math.max(0, Math.sin(t * 4 - i * .5)) * 2 : 0))));
+  [sSend, sRecv, pSend, pRecv].forEach(b => { b.userData.flash = Math.max(0, (b.userData.flash || 0) - dt * 1.5);
+    b.userData.edges.material.color.setHex(b.userData.c).multiplyScalar(1.6 * (1 + b.userData.flash * 2.5)); });
+  if (uses.s.mesh.visible) { uses.s.mesh.position.y = 3.4 + Math.sin(t * 1.2) * 0.08; uses.p.mesh.position.y = 3.4 + Math.sin(t * 1.2 + 1) * 0.08; }
+  const pa = pGeo.attributes.position.array;
+  for (let i = 0; i < NP; i++) { pa[i * 3 + 1] += dt * (0.08 + ps[i] * 0.15); if (pa[i * 3 + 1] > 22) pa[i * 3 + 1] = 0; }
+  pGeo.attributes.position.needsUpdate = true;
+  composer.render();
+  requestAnimationFrame(tick);
+}
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); });
+$('loading').classList.add('done');
+window.__sp = { go, plan };
+tick();
+</script>
+</body>
+</html>

@@ -1,0 +1,860 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>How RSA Works · Journey</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+  .pub { color: var(--green); } .prv { color: var(--amber); } .eve { color: var(--pink); } .al { color: var(--cyan); } .bo { color: var(--amber); }
+  .story .text .pub, .story .text .prv, .story .text .eve, .story .text .al, .story .text .bo { font-weight: 600; }
+
+  .intro { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; text-align: center; padding: 24px;
+    background: radial-gradient(ellipse at center, rgba(5,7,11,.35), rgba(5,7,11,.92) 70%); transition: opacity 1.2s ease, visibility 1.2s; }
+  .intro.gone { opacity: 0; visibility: hidden; }
+  .intro h1 { font-size: clamp(38px, 7vw, 84px); line-height: .98; letter-spacing: -.035em; font-weight: 600; margin: 18px 0 20px; }
+  .intro h1 em { font-style: normal; color: transparent; -webkit-text-stroke: 1.2px rgba(234,240,247,.6); }
+  .intro p { max-width: 520px; margin: 0 auto 30px; color: var(--muted); font-size: 16.5px; line-height: 1.6; }
+  .intro .btn.primary { height: 48px; padding: 0 26px; font-size: 15px; border-radius: 999px; box-shadow: 0 0 40px rgba(255,111,174,.22); }
+  .intro .keys { margin-top: 22px; font: 400 11px var(--mono); color: var(--dim); letter-spacing: .1em; }
+
+  .chip-row { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 9; display: flex; gap: 6px; padding: 5px; border-radius: 999px; opacity: 0; transition: opacity .6s; }
+  .chip-row.show { opacity: 1; }
+  .chip-row span { font: 500 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; padding: 8px 14px; border-radius: 999px; color: var(--dim); transition: all .4s; white-space: nowrap; }
+  .chip-row span.on { color: #05070b; background: var(--pc); box-shadow: 0 0 22px var(--pc); }
+
+  .story { position: fixed; left: 18px; bottom: 18px; z-index: 8; width: min(450px, calc(100vw - 36px)); padding: 22px 22px 18px; transition: opacity .6s, transform .6s; max-height: calc(100dvh - 100px); overflow-y: auto; }
+  .story.hidden { opacity: 0; transform: translateY(20px); pointer-events: none; }
+  .story h2 { font-size: 24px; line-height: 1.15; font-weight: 600; letter-spacing: -.015em; margin: 8px 0 10px; }
+  .story .text { color: #c5cedb; font-size: 15px; line-height: 1.62; }
+  .story .text b { color: var(--ink); font-weight: 600; }
+  .story .text ul { list-style: none; margin-top: 4px; }
+  .story .text li { padding: 5px 0 5px 16px; position: relative; font-size: 14px; }
+  .story .text li::before { content: ""; position: absolute; left: 0; top: 13px; width: 6px; height: 6px; border-radius: 2px; background: var(--pink); }
+  .eq { font: 500 13.5px var(--mono); background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 10px; line-height: 1.75; color: var(--ink); }
+  .eq .dim { color: var(--dim); }
+  .story .row { display: flex; align-items: center; gap: 8px; margin-top: 18px; }
+  .story .row .spacer { flex: 1; }
+  .story .count { font: 400 11px var(--mono); color: var(--dim); letter-spacing: .08em; }
+  .progress { height: 2px; background: var(--line); margin-top: 14px; border-radius: 2px; overflow: hidden; }
+  .progress i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--cyan), var(--pink), var(--amber)); transition: width .6s cubic-bezier(.2,.8,.2,1); }
+  .fade-in { animation: rise .5s cubic-bezier(.2,.8,.2,1); }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .try { display: flex; gap: 8px; margin-top: 12px; }
+  .try input { flex: 1; min-width: 0; height: 40px; border-radius: 10px; border: 1px solid var(--line-strong); background: rgba(255,255,255,.04); color: var(--ink);
+    font: 700 16px var(--mono); letter-spacing: .18em; text-transform: uppercase; padding: 0 12px; outline: none; }
+  .try input:focus { border-color: var(--pink); }
+  .try .btn { height: 40px; }
+  .try.busy { opacity: .5; pointer-events: none; }
+  .linkbtn { color: var(--pink); text-decoration: none; font-weight: 500; }
+  .linkbtn:hover { text-decoration: underline; }
+
+  @media (max-width: 760px) {
+    .page-title { display: none; }
+    .chip-row { top: 60px; }
+    .chip-row span { padding: 6px 9px; font-size: 9.5px; letter-spacing: .06em; }
+    .story { left: 8px; right: 8px; bottom: 8px; width: auto; padding: 16px 16px 14px; max-height: 52dvh; }
+    .story h2 { font-size: 20px; }
+    .story .text { font-size: 14px; }
+  }
+</style>
+</head>
+<body class="stage">
+<div class="loading" id="loading">GENERATING KEYS…</div>
+<canvas id="c" tabindex="0" aria-label="3D journey explaining RSA encryption"></canvas>
+
+<header class="topbar">
+  <a class="back" href="index.html">← Computer Architecture</a>
+  <div class="page-title">RSA <span>/ public-key encryption</span></div>
+</header>
+
+<div class="chip-row glass" id="chapters" aria-hidden="true">
+  <span data-c="idea" style="--pc: var(--cyan)">The idea</span>
+  <span data-c="maths" style="--pc: var(--pink)">The maths</span>
+  <span data-c="real" style="--pc: var(--amber)">Real world</span>
+</div>
+
+<section class="intro" id="intro">
+  <div>
+    <div class="kicker">An immersive journey</div>
+    <h1>How <em>RSA</em><br>keeps secrets</h1>
+    <p>Alice wants to send Bob a secret. Eve can see every message that crosses the internet. Discover how two keys, two prime numbers and a little clock arithmetic keep Eve in the dark.</p>
+    <button class="btn primary" id="enter">Begin</button>
+    <div class="keys">← → TO MOVE · SPACE FOR NEXT · DRAG TO LOOK AROUND</div>
+  </div>
+</section>
+
+<section class="story glass hidden" id="story" aria-live="polite">
+  <div id="storyBody"></div>
+  <div class="row">
+    <button class="btn icon" id="prev" aria-label="Previous step">←</button>
+    <button class="btn primary" id="next">Next →</button>
+    <button class="btn" id="auto" aria-pressed="false" title="Play automatically">▶ Auto</button>
+    <span class="spacer"></span>
+    <span class="count" id="count"></span>
+  </div>
+  <div class="progress"><i id="bar"></i></div>
+</section>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const $ = id => document.getElementById(id);
+await Promise.race([
+  Promise.all([document.fonts.load('600 64px "Space Grotesk"'), document.fonts.load('700 64px "JetBrains Mono"'), document.fonts.load('400 32px "JetBrains Mono"')]),
+  new Promise(r => setTimeout(r, 2500)),
+]);
+
+/* =========================================================
+   THE (TINY) KEYS — real RSA uses primes hundreds of digits long
+   ========================================================= */
+const P = 5, Q = 11, N = P * Q, PHI = (P - 1) * (Q - 1), E = 3, D = 27; // 3 × 27 = 81 = 2 × 40 + 1
+const modpow = (b, e, m) => { let r = 1n, x = BigInt(b) % BigInt(m), k = BigInt(e); const M = BigInt(m); while (k > 0n) { if (k & 1n) r = r * x % M; x = x * x % M; k >>= 1n; } return Number(r); };
+const encrypt = m => modpow(m, E, N), decrypt = c => modpow(c, D, N);
+const SUP = { 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' };
+const sup = n => String(n).split('').map(d => SUP[d]).join('');
+const letterNum = ch => ch.charCodeAt(0) - 64; // A = 1 … Z = 26
+const numLetter = n => String.fromCharCode(64 + n);
+
+/* =========================================================
+   SCENE
+   ========================================================= */
+const COL = { cyan: 0x5ee6ff, amber: 0xffb547, violet: 0xa48cff, pink: 0xff6fae, blue: 0x6aa8ff, green: 0x7dffb0, red: 0xff5a5a, gold: 0xe8b04a };
+const canvas = $('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x04060a);
+scene.fog = new THREE.FogExp2(0x04060a, 0.022);
+const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 300);
+camera.position.set(0, 30, 60);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.06;
+controls.minDistance = 2.5; controls.maxDistance = 60; controls.maxPolarAngle = Math.PI * 0.495;
+controls.target.set(0, 2, 0); controls.autoRotate = true; controls.autoRotateSpeed = 0.3;
+scene.add(new THREE.HemisphereLight(0x8fa8ff, 0x05060a, 0.8));
+const dl = new THREE.DirectionalLight(0xffffff, 1.4); dl.position.set(5, 12, 8); scene.add(dl);
+
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const glowColor = (hex, k = 2.2) => new THREE.Color(hex).multiplyScalar(k);
+const hex = c => '#' + new THREE.Color(c).getHexString();
+function canvasTex(w, h, draw) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const g = cv.getContext('2d'); draw && draw(g, w, h);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  return { cv, g, t };
+}
+function rr(g, x, y, w, h, r) { g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); }
+const SANS = '"Space Grotesk", system-ui, sans-serif', MONO = '"JetBrains Mono", ui-monospace, monospace';
+function textSprite(text, colorHex, { size = 0.34, bg = 'rgba(6,9,14,.88)', font = MONO, weight = 700 } = {}) {
+  const fs = 64, pad = 30;
+  const tmp = document.createElement('canvas').getContext('2d'); tmp.font = `${weight} ${fs}px ${font}`;
+  const w = Math.ceil(tmp.measureText(text).width) + pad * 2, h = fs + 34;
+  const { t } = canvasTex(w, h, g => {
+    if (bg) { rr(g, 2, 2, w - 4, h - 4, h / 2 - 2); g.fillStyle = bg; g.fill(); g.lineWidth = 3; g.strokeStyle = hex(colorHex); g.stroke(); }
+    g.font = `${weight} ${fs}px ${font}`; g.fillStyle = bg ? '#ffffff' : hex(colorHex); g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(text, w / 2, h / 2 + 3);
+  });
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true }));
+  s.scale.set(size * w / h, size, 1); s.renderOrder = 20; return s;
+}
+function floorText(text, w, h, colorHex, opacity = 0.75) {
+  const px = 160;
+  const { t } = canvasTex(Math.round(w * px), Math.round(h * px), (g, cw, ch) => {
+    g.font = `500 ${ch * 0.62}px ${MONO}`; g.fillStyle = hex(colorHex); g.textBaseline = 'middle';
+    if ('letterSpacing' in g) g.letterSpacing = `${ch * 0.12}px`;
+    g.fillText(text, 4, ch / 2);
+  });
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; return m;
+}
+const glowMat = (c, k = 2) => new THREE.MeshBasicMaterial({ color: glowColor(c, k) });
+const solid = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: .35, metalness: .6, ...o });
+
+/* ---------- ground ---------- */
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(260, 260), new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, uniforms: { uColor: { value: new THREE.Color(0x3d5a9a) } },
+  vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+  fragmentShader: `uniform vec3 uColor; varying vec3 vW;
+    float grid(vec2 p, float s){ vec2 q = p / s; vec2 g = abs(fract(q - .5) - .5) / fwidth(q); return 1. - min(min(g.x, g.y), 1.); }
+    void main(){ float d = length(vW.xz); float fade = 1. - smoothstep(8., 36., d);
+      float l = grid(vW.xz, 1.) * .2 + grid(vW.xz, 5.) * .42; gl_FragColor = vec4(uColor * l * fade, l * fade); }`,
+}));
+ground.rotation.x = -Math.PI / 2; scene.add(ground);
+
+/* ---------- Alice, Bob and Eve ---------- */
+const ALICE = V(-11, 0, 0), BOB = V(11, 0, 0), EVE = V(0, 2.8, -6.5);
+function platform(pos, c, name) {
+  const g = new THREE.Group(); g.position.copy(pos); scene.add(g);
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.8, 0.3, 64), solid(0x0e1522, { metalness: .5 })); base.position.y = 0.15; g.add(base);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(3.62, 0.03, 8, 128), glowMat(c, 1.8)); rim.rotation.x = Math.PI / 2; rim.position.y = 0.31; g.add(rim);
+  const fig = new THREE.Group(); fig.position.set(pos.x < 0 ? -1.9 : 1.9, 0.3, -0.6); g.add(fig);
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.42, 0.9, 8, 24), solid(0x101a2a, { emissive: new THREE.Color(c).multiplyScalar(.12) })); body.position.y = 0.95; fig.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.36, 32, 32), solid(0x101a2a, { emissive: new THREE.Color(c).multiplyScalar(.12) })); head.position.y = 2.0; fig.add(head);
+  const halo = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.025, 8, 64), glowMat(c, 2.4)); halo.rotation.x = Math.PI / 2; halo.position.y = 0.05; fig.add(halo);
+  const lbl = textSprite(name, c, { size: 0.5, bg: null }); lbl.position.set(fig.position.x, 3.0, fig.position.z); g.add(lbl);
+  return { g, fig, head };
+}
+const alice = platform(ALICE, COL.cyan, 'ALICE');
+const bob = platform(BOB, COL.amber, 'BOB');
+
+// Eve: a floating eye that watches everything on the internet
+const eve = new THREE.Group(); eve.position.copy(EVE); scene.add(eve);
+const eyeball = new THREE.Group(); eve.add(eyeball);
+eyeball.add(new THREE.Mesh(new THREE.SphereGeometry(0.7, 40, 40), solid(0xdfe6ef, { metalness: .1, roughness: .3 })));
+const iris = new THREE.Mesh(new THREE.CircleGeometry(0.34, 40), glowMat(COL.pink, 1.6)); iris.position.z = 0.701; eyeball.add(iris);
+const pupil = new THREE.Mesh(new THREE.CircleGeometry(0.15, 32), new THREE.MeshBasicMaterial({ color: 0x05060a })); pupil.position.z = 0.703; eyeball.add(pupil);
+const eveRing = new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.03, 8, 96), glowMat(COL.pink, 2)); eve.add(eveRing);
+const eveRing2 = new THREE.Mesh(new THREE.TorusGeometry(1.25, 0.015, 8, 96), glowMat(COL.pink, 1.4)); eve.add(eveRing2);
+const eveLbl = textSprite('EVE · eavesdropper', COL.pink, { size: 0.36, bg: null }); eveLbl.position.set(0, 1.65, 0); eve.add(eveLbl);
+
+/* ---------- the internet ---------- */
+const LANE_Z = 1.3;
+function flowTex() {
+  const { t } = canvasTex(512, 16, (g, w) => {
+    for (let i = 0; i < 4; i++) { const x = i * w / 4; const gr = g.createLinearGradient(x, 0, x + w / 4, 0);
+      gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(.75, 'rgba(255,255,255,.15)'); gr.addColorStop(.97, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = gr; g.fillRect(x, 0, w / 4, 16); }
+  });
+  t.wrapS = THREE.RepeatWrapping; return t;
+}
+const lanes = [];
+[[-0.14, 1], [0.14, -1]].forEach(([dz, dir]) => {
+  const t = flowTex(); t.repeat.x = dir * 15 / 4;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(15, 0.18), new THREE.MeshBasicMaterial({ map: t, color: glowColor(COL.violet, 1.6), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; m.position.set(0, 0.03, LANE_Z + dz); scene.add(m); lanes.push({ t, dir });
+});
+const netTxt = floorText('THE INTERNET  ·  anyone can watch', 6.2, 0.36, COL.violet, .75); netTxt.position.set(-3.1, 0.03, LANE_Z + 0.75); scene.add(netTxt);
+// Eve's "wiretap" beam down to the internet
+const tap = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1, 8), glowMat(COL.pink, 1.4)); scene.add(tap);
+{ const a = V(0, 0.05, LANE_Z), b = EVE.clone().add(V(0, -0.7, 0)); tap.position.copy(a.clone().lerp(b, .5)); tap.scale.y = a.distanceTo(b); tap.lookAt(b); tap.rotateX(Math.PI / 2); }
+
+/* ---------- information boards ---------- */
+function board(pos, c, w = 4.2, h = 1.9) {
+  const d = canvasTex(Math.round(w * 160), Math.round(h * 160));
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: d.t, transparent: true, color: 0xeeeeee, depthWrite: false }));
+  m.position.copy(pos); scene.add(m);
+  return { ...d, mesh: m, c, drawn: null };
+}
+function drawBoard(b, title, lines) {
+  const key = title + JSON.stringify(lines); if (b.drawn === key) return; b.drawn = key;
+  const { g, cv, t } = b, w = cv.width, h = cv.height; g.clearRect(0, 0, w, h);
+  g.fillStyle = 'rgba(6,9,14,.72)'; rr(g, 0, 0, w, h, 26); g.fill(); g.strokeStyle = hex(b.c) + '66'; g.lineWidth = 3; rr(g, 2, 2, w - 4, h - 4, 24); g.stroke();
+  g.textBaseline = 'middle'; g.fillStyle = hex(b.c); g.font = `700 30px ${MONO}`; g.fillText(title, 28, 40);
+  const fs = lines.length > 3 ? 34 : 42;
+  lines.forEach((l, i) => { g.fillStyle = i === 0 ? '#ffffff' : '#c5cedb'; g.font = `${i === 0 ? 700 : 500} ${fs}px ${MONO}`; g.fillText(l, 28, 100 + i * (fs + 16)); });
+  t.needsUpdate = true;
+}
+const aliceBoard = board(V(-11, 4.2, -2.4), COL.cyan);
+const bobBoard = board(V(11, 4.2, -2.4), COL.amber);
+const eveBoard = board(V(0, 5.3, -6.5), COL.pink, 4.6, 1.7);
+
+/* ---------- padlocks, keys and the message box ---------- */
+function makePadlock(c, ghost) {
+  const g = new THREE.Group();
+  const mat = solid(c, { emissive: new THREE.Color(c).multiplyScalar(.35), transparent: !!ghost, opacity: ghost ? .45 : 1 });
+  const bodyM = new THREE.Mesh(new RoundedBoxGeometry(0.9, 0.72, 0.36, 3, 0.08), mat); g.add(bodyM);
+  const hole = new THREE.Mesh(new THREE.CircleGeometry(0.08, 20), new THREE.MeshBasicMaterial({ color: 0x05060a })); hole.position.set(0, 0.04, 0.182); g.add(hole);
+  const slot = new THREE.Mesh(new THREE.PlaneGeometry(0.05, 0.16), new THREE.MeshBasicMaterial({ color: 0x05060a })); slot.position.set(0, -0.07, 0.182); g.add(slot);
+  const shackle = new THREE.Group(); shackle.position.set(0.24, 0.36, 0); g.add(shackle);
+  const smat = solid(0xc9d1db, { metalness: 1, roughness: .25, transparent: !!ghost, opacity: ghost ? .45 : 1 });
+  const arc = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.06, 12, 32, Math.PI), smat); arc.position.set(-0.24, 0.28, 0); shackle.add(arc);
+  const legL = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.3, 12), smat); legL.position.set(-0.48, 0.13, 0); shackle.add(legL);
+  const legR = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.3, 12), smat); legR.position.set(0, 0.13, 0); shackle.add(legR);
+  g.userData.mat = mat; g.userData.baseEm = mat.emissive.clone();
+  g.userData.setOpen = k => { shackle.position.y = 0.36 + k * 0.28; shackle.rotation.y = k * 1.4; };
+  g.userData.setOpen(1);
+  return g;
+}
+function makeKey(c, ghost) {
+  const g = new THREE.Group(); const m = ghost ? new THREE.MeshBasicMaterial({ color: glowColor(c, 1.4), wireframe: true, transparent: true, opacity: .55 })
+    : solid(c, { metalness: 1, roughness: .25, emissive: new THREE.Color(c).multiplyScalar(.3) });
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.08, 14, 40), m); ring.position.x = -0.55; g.add(ring);
+  const shaft = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.12, 0.1), m); shaft.position.x = 0.2; g.add(shaft);
+  [[0.5, 0.18], [0.66, 0.12]].forEach(([x, h]) => { const t = new THREE.Mesh(new THREE.BoxGeometry(0.1, h, 0.1), m); t.position.set(x, -0.06 - h / 2, 0); g.add(t); });
+  return g;
+}
+const bobPad = makePadlock(COL.green); bobPad.position.set(9.4, 1.5, -1.6); scene.add(bobPad);
+const bobPadLbl = textSprite('PUBLIC KEY', COL.green, { size: 0.26 }); bobPadLbl.position.set(0, 1.25, 0); bobPad.add(bobPadLbl);
+const bobKey = makeKey(COL.gold); bobKey.position.set(12.4, 1.5, -1.4); scene.add(bobKey);
+const bobKeyLbl = textSprite('PRIVATE KEY', COL.amber, { size: 0.26 }); bobKeyLbl.position.set(0, 0.85, 0); bobKey.add(bobKeyLbl);
+const alicePad = makePadlock(COL.green); scene.add(alicePad);
+const evePad = makePadlock(COL.green, true); scene.add(evePad);
+
+function makeBox(ghost) {
+  const g = new THREE.Group();
+  const d = canvasTex(256, 256);
+  const mats = Array.from({ length: 6 }, (_, i) => i === 4 ? new THREE.MeshStandardMaterial({ map: d.t, roughness: .4, metalness: .2, transparent: !!ghost, opacity: ghost ? .5 : 1 })
+    : solid(0x2a2236, { emissive: new THREE.Color(COL.violet).multiplyScalar(.12), transparent: !!ghost, opacity: ghost ? .5 : 1 }));
+  const cube = new THREE.Mesh(new RoundedBoxGeometry(1.3, 1.3, 1.3, 3, 0.1), mats); g.add(cube);
+  const lidPivot = new THREE.Group(); lidPivot.position.set(0, 0.66, -0.68); g.add(lidPivot);
+  const lid = new THREE.Mesh(new RoundedBoxGeometry(1.42, 0.14, 1.42, 2, 0.05), solid(0x3a2f4c, { emissive: new THREE.Color(COL.violet).multiplyScalar(.18), transparent: !!ghost, opacity: ghost ? .5 : 1 }));
+  lid.position.set(0, 0.07, 0.68); lidPivot.add(lid);
+  const inner = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.1), new THREE.MeshBasicMaterial({ color: glowColor(COL.amber, 2.2), transparent: true, opacity: 0 }));
+  inner.rotation.x = -Math.PI / 2; inner.position.y = 0.655; g.add(inner);
+  g.userData.setLid = k => { lidPivot.rotation.x = -k * 1.95; inner.material.opacity = k; };
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1.3, 1.3, 1.3)), new THREE.LineBasicMaterial({ color: glowColor(COL.violet, 1.5) }));
+  edges.scale.setScalar(.995); g.add(edges);
+  g.userData.face = text => { const { g: c, t } = d; c.clearRect(0, 0, 256, 256); c.fillStyle = '#1a1424'; c.fillRect(0, 0, 256, 256);
+    c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = text === '?' ? '#5a4d6e' : '#ffffff'; c.font = `700 ${text.length > 3 ? 64 : 110}px ${MONO}`; c.fillText(text, 128, 128); t.needsUpdate = true; };
+  g.userData.face('HI');
+  return g;
+}
+const box = makeBox(); scene.add(box);
+const eveBox = makeBox(true); eveBox.userData.face('?'); scene.add(eveBox);
+const evePadOnBox = makePadlock(COL.green, true); evePadOnBox.userData.setOpen(0); evePadOnBox.position.set(0, -0.15, 0.85); eveBox.add(evePadOnBox);
+const noSprite = textSprite('✗  CAN\'T OPEN IT', COL.red, { size: 0.3 }); noSprite.position.set(0, 1.25, 0); eveBox.add(noSprite);
+const hiSprite = textSprite('"HI"', COL.amber, { size: 0.6 }); scene.add(hiSprite); hiSprite.userData.s = hiSprite.scale.clone();
+const lockedSprite = textSprite('✗  LOCKED — no key!', COL.red, { size: 0.3 }); scene.add(lockedSprite);
+// a soft beam of light that rises out of the opened box
+const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.6, 2.4, 32, 1, true), new THREE.MeshBasicMaterial({ color: glowColor(COL.amber, 1.2), transparent: true, opacity: .18, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+scene.add(beam);
+const flashSprite = new THREE.Sprite(new THREE.SpriteMaterial({ color: COL.amber, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0 })); scene.add(flashSprite);
+
+const POS = {
+  alicePad: V(-9.4, 1.5, -0.6), aliceBox: V(-9.6, 0.95, 1.9), bobBox: V(9.9, 0.95, 1.9),
+  evePad: V(-1.6, 1.2, -5.2), eveBox: V(1.6, 1.0, -5.2), padOnBox: V(0, -0.15, 0.85),
+  padAside: V(11.6, 0.68, 2.7), keyhole: V(0, -0.11, 1.035),
+};
+
+/* ---------- prime orbs ---------- */
+function orb(text, c, r = 0.55) {
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(r, 40, 40), solid(0x141020, { emissive: new THREE.Color(c).multiplyScalar(.5), metalness: .3 })));
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(r * 1.25, 0.02, 8, 64), glowMat(c, 2.2)); g.add(ring); g.userData.ring = ring;
+  const l = textSprite(text, c, { size: 0.42 }); l.position.y = r + 0.45; g.add(l);
+  scene.add(g); return g;
+}
+const PR = V(11, 7.1, -0.6);
+const orbP = orb('p = 5', COL.green), orbQ = orb('q = 11', COL.green), orbN = orb('n = 55', COL.amber, 0.8);
+
+/* ---------- the giant number ---------- */
+const bigDigits = (() => { let s = ''; let x = 7; for (let i = 0; i < 617; i++) { x = (x * 1103515245 + 12345) % 2147483648; s += (i === 0 ? 1 + x % 9 : x % 10); } return s; })();
+const bigTex = canvasTex(2048, 900, (g, w, h) => {
+  g.fillStyle = 'rgba(6,9,14,.82)'; rr(g, 0, 0, w, h, 40); g.fill();
+  g.strokeStyle = '#ffb54766'; g.lineWidth = 4; rr(g, 3, 3, w - 6, h - 6, 38); g.stroke();
+  g.fillStyle = '#ffb547'; g.font = `700 52px ${MONO}`; g.textBaseline = 'middle'; g.fillText('A REAL PUBLIC KEY  n  —  617 DIGITS', 60, 72);
+  g.fillStyle = '#d6dde8'; g.font = `500 34px ${MONO}`;
+  const per = 92; for (let i = 0; i * per < bigDigits.length; i++) g.fillText(bigDigits.slice(i * per, (i + 1) * per), 60, 160 + i * 58);
+  g.fillStyle = '#ff8a8a'; g.font = `700 44px ${MONO}`; g.fillText('= ? × ?     (no computer can find these primes in a lifetime)', 60, 160 + 7 * 58 + 70);
+});
+const bigPanel = new THREE.Mesh(new THREE.PlaneGeometry(11, 4.83), new THREE.MeshBasicMaterial({ map: bigTex.t, transparent: true, color: 0xeeeeee }));
+bigPanel.position.set(0, 6.2, 1.5); scene.add(bigPanel);
+
+/* ---------- the modular clock (mod 55) ---------- */
+const RING = V(0, 6.8, 2), RR = 3.0;
+const clock = new THREE.Group(); clock.position.copy(RING); scene.add(clock);
+const faceTex = canvasTex(1024, 1024, (g, w, h) => {
+  const cx = w / 2, cy = h / 2;
+  const grd = g.createRadialGradient(cx, cy, 0, cx, cy, w / 2); grd.addColorStop(0, 'rgba(30,18,40,.85)'); grd.addColorStop(1, 'rgba(10,8,18,.85)');
+  g.fillStyle = grd; g.beginPath(); g.arc(cx, cy, w / 2 - 4, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = '#ff6fae'; g.lineWidth = 6; g.beginPath(); g.arc(cx, cy, w / 2 - 8, 0, Math.PI * 2); g.stroke();
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (let i = 0; i < N; i++) {
+    const a = -Math.PI / 2 + i / N * Math.PI * 2, big = i % 5 === 0;
+    const r0 = w / 2 - 22, r1 = r0 - (big ? 44 : 22);
+    g.strokeStyle = big ? '#ffffff' : '#7d6a8f'; g.lineWidth = big ? 6 : 3;
+    g.beginPath(); g.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0); g.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1); g.stroke();
+    if (big) { g.fillStyle = '#ffffff'; g.font = `700 40px ${MONO}`; g.fillText(String(i), cx + Math.cos(a) * (r1 - 40), cy + Math.sin(a) * (r1 - 40)); }
+  }
+  g.fillStyle = '#ff6fae'; g.font = `700 54px ${MONO}`; g.fillText('mod 55', cx, cy - 150);
+});
+const face = new THREE.Mesh(new THREE.CircleGeometry(RR, 96), new THREE.MeshBasicMaterial({ map: faceTex.t, transparent: true, color: 0xeeeeee }));
+clock.add(face);
+const hand = new THREE.Mesh(new THREE.BoxGeometry(0.05, RR * 0.72, 0.02), glowMat(COL.pink, 2.4)); hand.geometry.translate(0, RR * 0.36, 0); hand.position.z = 0.02; clock.add(hand);
+const marker = new THREE.Mesh(new THREE.SphereGeometry(0.14, 20, 20), glowMat(COL.pink, 4)); marker.position.z = 0.05; clock.add(marker);
+const clockDisp = canvasTex(900, 330);
+const clockPanel = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 1.32), new THREE.MeshBasicMaterial({ map: clockDisp.t, transparent: true, color: 0xeeeeee }));
+clockPanel.position.set(0, -0.55, 0.06); clock.add(clockPanel);
+let landSprite = null;
+function setHand(pos) { // pos counts around the 55 positions (may be fractional)
+  const a = -(pos / N) * Math.PI * 2; hand.rotation.z = a;
+  marker.position.set(Math.sin(-a) * RR * 0.84, Math.cos(a) * RR * 0.84, 0.05);
+}
+function drawClock(l1, l2, l3) {
+  const key = l1 + l2 + l3; if (clockDisp.drawn === key) return; clockDisp.drawn = key;
+  const { g, cv, t } = clockDisp, w = cv.width, h = cv.height; g.clearRect(0, 0, w, h);
+  g.fillStyle = 'rgba(6,9,14,.82)'; rr(g, 0, 0, w, h, 26); g.fill();
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = '#ffffff'; g.font = `700 ${l1.length > 26 ? 34 : 56}px ${MONO}`; g.fillText(l1, w / 2, 70);
+  g.fillStyle = '#c5cedb'; g.font = `500 34px ${MONO}`; g.fillText(l2, w / 2, 170);
+  g.fillStyle = '#ff6fae'; g.font = `700 44px ${MONO}`; g.fillText(l3, w / 2, 262);
+  t.needsUpdate = true;
+}
+
+/* ---------- atmosphere + post ---------- */
+const NP = 650, pp = new Float32Array(NP * 3), ps = new Float32Array(NP);
+for (let i = 0; i < NP; i++) { pp[i * 3] = (Math.random() - .5) * 70; pp[i * 3 + 1] = Math.random() * 22; pp[i * 3 + 2] = (Math.random() - .5) * 70; ps[i] = Math.random(); }
+const pGeo = new THREE.BufferGeometry(); pGeo.setAttribute('position', new THREE.BufferAttribute(pp, 3));
+const haloTex = canvasTex(128, 128, (g, w, h) => { const r = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+  r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(.25, 'rgba(255,255,255,.35)'); r.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = r; g.fillRect(0, 0, w, h); }).t;
+scene.add(new THREE.Points(pGeo, new THREE.PointsMaterial({ map: haloTex, color: 0xffb8d8, size: 0.12, transparent: true, opacity: .45, depthWrite: false, blending: THREE.AdditiveBlending })));
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.8, 0.55, 1.0));
+composer.addPass(new OutputPass());
+
+/* =========================================================
+   ANIMATION HELPERS
+   ========================================================= */
+const anims = new Set();
+const animate = (ms, fn = () => {}) => new Promise(res => anims.add({ t0: performance.now(), ms, fn, res }));
+const temp = new Set();
+function cancelAll() { anims.forEach(a => a.res(false)); anims.clear(); temp.forEach(o => scene.remove(o)); temp.clear(); }
+const smooth = k => k * k * (3 - 2 * k);
+let runId = 0, eyeTarget = null;
+function arcPath(a, b, h = 2) { const m = a.clone().lerp(b, .5); m.y = Math.max(a.y, b.y) + h; return new THREE.QuadraticBezierCurve3(a, m, b); }
+function crossPath(a, b) { // up onto the internet lane, across, and down again
+  const p = new THREE.CurvePath();
+  const a1 = V(a.x + Math.sign(b.x - a.x) * 1.5, 1.0, LANE_Z), b1 = V(b.x - Math.sign(b.x - a.x) * 1.5, 1.0, LANE_Z);
+  p.add(new THREE.QuadraticBezierCurve3(a, V(a.x, 1.4, LANE_Z), a1)); p.add(new THREE.LineCurve3(a1, b1)); p.add(new THREE.QuadraticBezierCurve3(b1, V(b.x, 1.4, LANE_Z), b)); return p;
+}
+async function moveObj(obj, curve, ms, id, spin = 0) {
+  eyeTarget = obj;
+  const ok = await animate(ms, k => { obj.position.copy(curve.getPointAt(smooth(k))); if (spin) obj.rotation.y = smooth(k) * spin; });
+  if (eyeTarget === obj) eyeTarget = null;
+  return ok && id === runId;
+}
+function tokenSprite(text, c) { const s = textSprite(text, c, { size: 0.42 }); scene.add(s); temp.add(s); return s; }
+async function spinClock(base, exp, kind, id, ms = 3200) {
+  const total = BigInt(base) ** BigInt(exp), res = Number(total % BigInt(N)), laps = total / BigInt(N);
+  const totalStr = total.toString();
+  const pretty = totalStr.length > 12 ? `${totalStr.slice(0, 10)}… (${totalStr.length} digits)` : totalStr;
+  drawClock(`${base}${sup(exp)} = ${pretty}`, 'counting around the clock…', '');
+  // small numbers: spin for real; huge numbers: spin a few times then land
+  const turns = laps < 40n ? Number(total) : 8 * N + res;
+  if (landSprite) { clock.remove(landSprite); landSprite = null; }
+  const ok = await animate(ms, k => {
+    const e = 1 - Math.pow(1 - k, 3); setHand(turns * e);
+    if (laps < 40n) drawClock(`${base}${sup(exp)} = ${pretty}`, `laps so far: ${Math.floor(turns * e / N)}`, '');
+  });
+  if (!ok || id !== runId) return null;
+  setHand(res);
+  const ls = laps.toString(); const lapTxt = laps < 1000000n ? ls : `about ${(Number(ls.slice(0, 2)) / 10).toFixed(1)} × 10${sup(ls.length - 1)}`;
+  drawClock(`${base}${sup(exp)} = ${pretty}`, `${lapTxt} full laps, then land on…`, `${base}${sup(exp)} mod 55 = ${res}`);
+  landSprite = textSprite(String(res), kind === 'dec' ? COL.amber : COL.green, { size: 0.5 });
+  landSprite.position.copy(marker.position).multiplyScalar(1.22); landSprite.position.z = 0.1; clock.add(landSprite);
+  marker.scale.setScalar(2.2);
+  await animate(900);
+  return res;
+}
+
+/* =========================================================
+   STATE — what is visible at the end of each step
+   ========================================================= */
+const S0 = {
+  keys: false, alicePad: false, evePad: false, box: 'none', locked: false, open: false, eveBox: false, tried: false,
+  primes: 0, big: false, clock: false, chapter: 'idea',
+  alice: ['Wants to send:', '"HI" to Bob'], bob: ['Waiting for', 'a message…'], eve: ['Watching', 'everything…'],
+  clockTxt: ['', '', ''], hand: 0,
+};
+const STEPS = [
+  { view: 'overview', kicker: 'The problem', title: 'Sending a secret in public',
+    text: '<span class="al">Alice</span> wants to send a secret message to <span class="bo">Bob</span>. Everything sent over the internet can be copied — and <span class="eve">Eve</span> is watching.<br><br>Encryption scrambles the message. But with a single shared key, Alice would first have to send the key… and Eve would copy that too. <b>How can two strangers share a secret?</b>',
+    state: {} },
+  { view: 'bob', kicker: 'Two keys', title: 'Bob makes a key pair', focus: 'bob',
+    text: 'RSA uses <b>two different keys</b> that work as a pair:<br><br>A <span class="pub">public key</span> — like an <b>open padlock</b>. Bob can give copies to anyone.<br>A <span class="prv">private key</span> — the only key that opens that padlock. Bob <b>never shares it</b>.',
+    acts: [{ do: 'keys' }],
+    state: { keys: true, bob: ['Public key: share it', 'Private key: SECRET'] } },
+  { view: 'overview', kicker: 'Sharing', title: 'Give the padlock to everyone',
+    text: 'Bob sends his <span class="pub">public key</span> across the internet to Alice. Eve copies it too — and <b>that\'s fine</b>.<br><br>A public key can only <b>lock</b> things. It cannot unlock them.',
+    acts: [{ do: 'sharePad' }],
+    state: { alicePad: true, evePad: true, alice: ['Has Bob\'s', 'public key'], eve: ['Copied Bob\'s', 'public key…'] } },
+  { view: 'alice', kicker: 'Encrypting', title: 'Alice locks the message', focus: 'alice',
+    text: 'Alice puts her message in a box and snaps <b>Bob\'s</b> padlock shut. Click! This is <b>encryption</b> using Bob\'s <span class="pub">public key</span>.<br><br>Locking it was easy. But who can open it again?',
+    acts: [{ do: 'lock' }],
+    state: { box: 'alice', locked: true, alicePad: false, alice: ['Message "HI"', 'locked with Bob\'s', 'public key'] } },
+  { view: 'aliceClose', kicker: 'A one-way lock', title: 'Even Alice can\'t open it', focus: 'alice',
+    text: 'Alice wants to check her message one more time. She tugs at the padlock… it won\'t open — and she has <b>no key</b> to try.<br><br>Bob only handed out <b>open padlocks</b> (his <span class="pub">public key</span>). Anyone can snap one shut, but <b>no key comes with it</b>. The only key that fits is Bob\'s <span class="prv">private key</span>, and it never leaves Bob.<div class="eq">public key  → can only LOCK   (encrypt)<br>private key → the only way to UNLOCK (decrypt)</div>',
+    acts: [{ do: 'aliceTries' }],
+    state: { tried: true, alice: ['I locked it…', 'but now I can\'t', 'open it!'] } },
+  { view: 'eve', kicker: 'Sending', title: 'Eve copies the box',
+    text: 'The locked box travels across the internet. Eve makes a copy and tries to open it — but, just like Alice, she only has the <span class="pub">public key</span>: an open padlock, with no key.<br><br>All Eve can see is <b>scrambled ciphertext</b>.',
+    acts: [{ do: 'send' }],
+    state: { box: 'bob', eveBox: true, eve: ['Has a copy of', 'the box…', 'CAN\'T OPEN IT'] } },
+  { view: 'bobClose', kicker: 'Decrypting', title: 'Bob unlocks it', focus: 'bob',
+    text: 'Bob takes his <span class="prv">private key</span>, slides it into the keyhole and turns it. The padlock springs open, the lid lifts, and out comes <b>"HI"</b>. This is <b>decryption</b>.<br><br>The private key never travelled across the internet, so Eve never had a chance to copy it. This is <b>asymmetric encryption</b>: one key to lock, a <b>different</b> key to unlock.',
+    acts: [{ do: 'unlock' }],
+    state: { open: true, bob: ['Unlocked with', 'private key:', '"HI"'] } },
+  { view: 'primes', kicker: 'Inside the padlock', title: 'Two secret prime numbers', chapter: 'maths',
+    text: 'How can a padlock be made of numbers? Bob secretly picks two <b>prime numbers</b>:<div class="eq">p = 5 &nbsp; q = 11<br>n = p × q = <b>55</b></div><br>The number <b>n = 55</b> becomes part of his public key. Multiplying is <b>easy</b> — any computer can do it instantly.',
+    acts: [{ do: 'primes' }],
+    state: { primes: 2, chapter: 'maths', bob: ['Secret: p=5, q=11', 'Public: n = 55'] } },
+  { view: 'big', kicker: 'The one-way trick', title: 'Easy to multiply, hard to undo', chapter: 'maths',
+    text: 'Going backwards — finding which two primes make <b>n</b> — is called <b>factorising</b>. For 55 it\'s easy. But real RSA keys use primes hundreds of digits long, so <b>n</b> has about <b>617 digits</b>.<br><br>No computer on Earth could find the primes in a lifetime. And without them, nobody can work out the private key.',
+    acts: [{ do: 'big' }],
+    state: { primes: 2, big: true, chapter: 'maths' } },
+  { view: 'clock', kicker: 'Clock arithmetic', title: 'Counting around a clock', chapter: 'maths',
+    text: 'RSA does its calculations <b>mod 55</b> — imagine a clock with 55 positions (0 to 54). Count around the clock and keep only <b>where you land</b>.<div class="eq">60 → one full lap (55), then 5 more<br>60 mod 55 = <b>5</b> <span class="dim">(the remainder after ÷ 55)</span></div>',
+    acts: [{ do: 'clockDemo' }],
+    state: { primes: 0, big: false, clock: true, chapter: 'maths', clockTxt: ['60 = 60', '1 full lap, then land on…', '60 mod 55 = 5'], hand: 5 } },
+  { view: 'clockWide', kicker: 'Encrypting with numbers', title: 'Locking = power, then mod', chapter: 'maths',
+    text: 'Letters become numbers: <b>H = 8</b>, <b>I = 9</b>. Bob\'s <span class="pub">public key</span> is <b>(n = 55, e = 3)</b>. Alice raises each number to the power 3, then goes around the clock:<div class="eq">8³ = 512 → 9 laps → <b>17</b><br>9³ = 729 → 13 laps → <b>14</b></div>The ciphertext <b>17 14</b> is what Eve sees.',
+    acts: [{ do: 'encrypt' }],
+    state: { clock: true, chapter: 'maths', alice: ['H I → 8 9', '8³ mod 55 = 17', '9³ mod 55 = 14', 'sends: 17 14'], eve: ['Sees: 17 14', 'Without d, it\'s', 'meaningless'], clockTxt: ['9³ = 729', '13 full laps, then land on…', '9³ mod 55 = 14'], hand: 14 } },
+  { view: 'clockWide', kicker: 'Decrypting with numbers', title: 'Unlocking = a different power', chapter: 'maths',
+    text: 'Bob\'s <span class="prv">private key</span> is <b>d = 27</b>. He raises each ciphertext number to the power 27 and goes around the same clock:<div class="eq">17²⁷ (a 34-digit number!) → <b>8</b> = H<br>14²⁷ → <b>9</b> = I</div><b>"HI"</b> again! Bob can only find <b>d</b> because he knows the secret primes 5 and 11. Eve only knows 55.',
+    acts: [{ do: 'decrypt' }],
+    state: { clock: true, chapter: 'maths', bob: ['17²⁷ mod 55 = 8 → H', '14²⁷ mod 55 = 9 → I', 'Message: "HI"'], clockTxt: ['14²⁷ = 8819763977… (31 digits)', 'about 1.6 × 10²⁹ full laps, then land on…', '14²⁷ mod 55 = 9'], hand: 9 } },
+  { view: 'overview', kicker: 'Real world', title: 'RSA is all around you', chapter: 'real',
+    text: 'Every time you see the <b>padlock</b> in your browser (<b>HTTPS</b>), public-key encryption like RSA is helping your computer and the website agree on a secret — even though strangers can see the traffic.<br><br>It also protects online banking, shopping and email, and it can make <b>digital signatures</b> that prove who sent a message.',
+    state: { clock: false, chapter: 'real', alice: ['Your computer'], bob: ['A website', '(e.g. your bank)'], eve: ['Anyone on', 'the network'] } },
+  { view: 'overview', kicker: 'Summary', title: 'Your turn', chapter: 'real', free: true,
+    text: '<ul><li><span class="pub">Public key</span> — shared with everyone, used to <b>encrypt</b></li><li><span class="prv">Private key</span> — kept secret, used to <b>decrypt</b></li><li>This is <b>asymmetric</b> encryption: two different keys</li><li>Security comes from how hard it is to <b>factorise</b> huge numbers</li></ul><div style="margin-top:10px">Type a word (A–Z) and send it to Bob with the tiny keys n = 55, e = 3, d = 27:</div><div class="try" id="try"><input id="word" maxlength="8" value="SECRET" aria-label="Word to encrypt" autocomplete="off" spellcheck="false"><button class="btn primary" id="send">Encrypt &amp; send</button></div><div style="margin-top:12px"><a class="linkbtn" href="index.html">Back to all topics →</a></div>',
+    state: { chapter: 'real', alice: ['Type a word', 'and press send'], bob: ['Waiting…'], eve: ['Watching', 'everything…'] } },
+];
+const SNAP = []; { let st = structuredClone(S0); STEPS.forEach(s => { st = { ...structuredClone(st), ...structuredClone(s.state || {}) }; SNAP.push(st); }); }
+
+function applyState(st) {
+  bobPad.visible = bobKey.visible = st.keys;
+  bobPad.scale.setScalar(1); bobKey.scale.setScalar(1);
+  alicePad.visible = st.alicePad; if (st.alicePad) { alicePad.position.copy(POS.alicePad); alicePad.userData.setOpen(1); alicePad.rotation.set(0, 0, 0); }
+  evePad.visible = st.evePad; evePad.position.copy(POS.evePad);
+  box.visible = st.box !== 'none';
+  if (st.box !== 'none') box.position.copy(st.box === 'alice' ? POS.aliceBox : POS.bobBox);
+  box.rotation.set(0, 0, 0);
+  // the lock on the box
+  alicePad.rotation.set(0, 0, 0); alicePad.userData.mat.emissive.copy(alicePad.userData.baseEm);
+  if (st.locked && !st.open) { box.add(alicePad); alicePad.visible = true; alicePad.position.copy(POS.padOnBox); alicePad.userData.setOpen(0); }
+  else { if (alicePad.parent === box) scene.add(alicePad); alicePad.visible = st.alicePad; }
+  if (st.open) { alicePad.visible = true; alicePad.position.copy(POS.padAside); alicePad.rotation.set(0, -0.5, 0); alicePad.userData.setOpen(1); }
+  box.userData.face(st.locked && !st.open ? '?' : 'HI');
+  box.userData.setLid(st.open ? 1 : 0);
+  const showOpen = st.open && st.box === 'bob' && st.chapter === 'idea';
+  hiSprite.visible = beam.visible = showOpen;
+  hiSprite.position.copy(POS.bobBox).add(V(0, 2.3, 0)); hiSprite.scale.copy(hiSprite.userData.s);
+  beam.position.copy(POS.bobBox).add(V(0, 1.85, 0)); beam.scale.set(1, 1, 1);
+  lockedSprite.visible = st.tried && st.box === 'alice' && st.chapter === 'idea';
+  lockedSprite.position.copy(POS.aliceBox).add(V(0, 1.45, 0));
+  flashSprite.material.opacity = 0; bobKey.visible = st.keys; eveBox.rotation.set(0, 0, 0);
+  eveBox.visible = st.eveBox && st.chapter === 'idea'; eveBox.position.copy(POS.eveBox);
+  if (st.chapter !== 'idea') { box.visible = false; alicePad.visible = false; evePad.visible = false; hiSprite.visible = beam.visible = false; }
+  orbP.visible = orbQ.visible = st.primes >= 1 && false; orbN.visible = st.primes >= 2;
+  orbN.position.copy(PR); orbN.scale.setScalar(1);
+  bigPanel.visible = st.big;
+  eve.visible = tap.visible = eveBoard.mesh.visible = !(st.clock || st.big); // keep the maths views uncluttered
+  clock.visible = st.clock; setHand(st.hand || 0); marker.scale.setScalar(1);
+  if (landSprite) { clock.remove(landSprite); landSprite = null; }
+  drawClock(...st.clockTxt);
+  drawBoard(aliceBoard, 'ALICE', st.alice); drawBoard(bobBoard, 'BOB', st.bob); drawBoard(eveBoard, 'EVE SEES', st.eve);
+  document.querySelectorAll('#chapters span').forEach(s => s.classList.toggle('on', s.dataset.c === st.chapter));
+}
+
+/* =========================================================
+   ACTIONS (the animated part of each step)
+   ========================================================= */
+const ACTIONS = {
+  async keys(id) {
+    bobPad.visible = bobKey.visible = true;
+    await animate(1100, k => { const e = smooth(k); bobPad.scale.setScalar(e); bobKey.scale.setScalar(e); bobPad.rotation.y = (1 - e) * 3; bobKey.rotation.y = (1 - e) * -3; });
+  },
+  async sharePad(id) {
+    const copy = makePadlock(COL.green); scene.add(copy); temp.add(copy); copy.position.copy(bobPad.position);
+    const ok = await moveObj(copy, crossPath(bobPad.position.clone(), POS.alicePad.clone()), 2600, id, Math.PI * 2);
+    // Eve takes a copy as it passes
+    if (!ok) return;
+    scene.remove(copy); temp.delete(copy); S.alicePad = true; applyState(S);
+    const ghost = makePadlock(COL.green, true); scene.add(ghost); temp.add(ghost);
+    if (!await moveObj(ghost, arcPath(V(0, 1, LANE_Z), POS.evePad.clone(), 2.5), 1300, id)) return;
+    scene.remove(ghost); temp.delete(ghost); S.evePad = true; S.eve = ['Copied Bob\'s', 'public key…']; applyState(S);
+  },
+  async lock(id) {
+    box.visible = true; box.position.copy(POS.aliceBox); box.userData.face('HI');
+    await animate(700, k => box.scale.setScalar(smooth(k)));
+    if (id !== runId) return;
+    const start = POS.alicePad.clone(), end = POS.aliceBox.clone().add(POS.padOnBox);
+    if (!await moveObj(alicePad, arcPath(start, end, 0.8), 1100, id)) return;
+    await animate(500, k => alicePad.userData.setOpen(1 - smooth(k)));
+    box.userData.face('?');
+  },
+  async send(id) {
+    const from = POS.aliceBox.clone(), to = POS.bobBox.clone();
+    const path = crossPath(from, to);
+    eyeTarget = box;
+    let copied = false;
+    const ok = await animate(3600, k => {
+      box.position.copy(path.getPointAt(smooth(k)));
+      if (!copied && box.position.x > -0.5) { copied = true; spawnEveCopy(id); }
+    });
+    if (!ok) return;
+    eyeTarget = null;
+    await animate(1500);
+  },
+  async aliceTries(id) {
+    // Alice looks for a key she doesn't have…
+    const ghostKey = makeKey(COL.cyan, true); scene.add(ghostKey); temp.add(ghostKey);
+    const q = textSprite('?', COL.cyan, { size: 0.5, bg: null }); scene.add(q); temp.add(q);
+    const kp = POS.aliceBox.clone().add(V(-1.5, 1.6, 0.6));
+    ghostKey.position.copy(kp); q.position.copy(kp).add(V(0, 0.55, 0));
+    await animate(900, k => { ghostKey.scale.setScalar(smooth(k)); ghostKey.rotation.y = Math.sin(k * 6) * .4; q.material.opacity = smooth(k); });
+    if (id !== runId) return;
+    // …then tugs at the padlock three times
+    const em = alicePad.userData.mat.emissive, base = alicePad.userData.baseEm, red = new THREE.Color(COL.red).multiplyScalar(.9);
+    for (let n = 0; n < 3; n++) {
+      if (!await animate(520, k => {
+        const tug = Math.sin(k * Math.PI);
+        alicePad.userData.setOpen(tug * 0.07); box.rotation.z = Math.sin(k * Math.PI * 4) * 0.05 * tug;
+        em.copy(base).lerp(red, tug);
+      })) return;
+      await animate(160);
+    }
+    box.rotation.z = 0; em.copy(base); alicePad.userData.setOpen(0);
+    lockedSprite.visible = true; lockedSprite.position.copy(POS.aliceBox).add(V(0, 1.45, 0));
+    const s0 = lockedSprite.scale.clone();
+    await animate(500, k => { const e = 1 + Math.sin(k * Math.PI) * .25; lockedSprite.scale.set(s0.x * e, s0.y * e, 1); });
+    await animate(600, k => { ghostKey.scale.setScalar(1 - smooth(k)); q.material.opacity = 1 - smooth(k); });
+  },
+  async unlock(id) {
+    const hole = POS.bobBox.clone().add(POS.keyhole);
+    // the key sits in a pivot: pivot.rotation.y turns it to point into the keyhole, key.rotation.x turns it in the lock
+    const pivot = new THREE.Group(); const key = makeKey(COL.gold); pivot.add(key); scene.add(pivot); temp.add(pivot);
+    pivot.position.copy(bobKey.position); bobKey.visible = false;
+    const TIP = 0.72; // distance from the key's centre to its tip
+    const approach = hole.clone().add(V(0, 0, TIP + 0.9)), inserted = hole.clone().add(V(0, 0, TIP - 0.22));
+    const path = arcPath(pivot.position.clone(), approach, 1.4); eyeTarget = pivot;
+    if (!await animate(1500, k => { const e = smooth(k); pivot.position.copy(path.getPointAt(e)); pivot.rotation.y = e * Math.PI / 2; key.rotation.x = 0; })) return;
+    // slide into the keyhole
+    if (!await animate(600, k => pivot.position.lerpVectors(approach, inserted, smooth(k)))) return;
+    // turn it — click!
+    if (!await animate(600, k => key.rotation.x = smooth(k) * Math.PI / 2)) return;
+    flashSprite.position.copy(hole).add(V(0, 0, 0.1)); flashSprite.material.map = haloTex; flashSprite.material.needsUpdate = true;
+    const em = alicePad.userData.mat.emissive, base = alicePad.userData.baseEm.clone(), gold = new THREE.Color(COL.amber);
+    // the shackle springs open (with a little overshoot)
+    const back = k => 1 + 2.2 * Math.pow(k - 1, 3) + 1.2 * Math.pow(k - 1, 2);
+    if (!await animate(550, k => { alicePad.userData.setOpen(back(k)); flashSprite.material.opacity = 1 - k; flashSprite.scale.setScalar(0.4 + k * 1.6); em.copy(base).lerp(gold, 1 - k); })) return;
+    em.copy(base);
+    // padlock (with the key still in it) is lifted off and set down beside the box
+    const padStart = new THREE.Vector3(); alicePad.getWorldPosition(padStart); scene.add(alicePad); alicePad.position.copy(padStart);
+    const keyOffset = pivot.position.clone().sub(padStart);
+    const padPath = arcPath(padStart, POS.padAside.clone(), 0.9);
+    if (!await animate(900, k => { const e = smooth(k); alicePad.position.copy(padPath.getPointAt(e)); alicePad.rotation.y = -0.5 * e; pivot.position.copy(alicePad.position).add(keyOffset.clone().applyAxisAngle(V(0, 1, 0), -0.5 * e)); pivot.rotation.y = Math.PI / 2 - 0.5 * e; })) return;
+    // the lid opens and light spills out
+    beam.visible = true; beam.position.copy(POS.bobBox).add(V(0, 1.85, 0));
+    if (!await animate(900, k => { const e = smooth(k); box.userData.setLid(e); beam.scale.set(1, Math.max(0.01, e), 1); beam.material.opacity = .18 * e; })) return;
+    box.userData.face('HI');
+    // the message rises out
+    hiSprite.visible = true; const s = hiSprite.userData.s;
+    if (!await animate(1000, k => { const e = smooth(k); hiSprite.position.copy(POS.bobBox).add(V(0, 0.5 + 1.8 * e, 0)); hiSprite.scale.set(s.x * (0.3 + 0.7 * e), s.y * (0.3 + 0.7 * e), 1); })) return;
+    // the private key goes straight back to Bob
+    const kStart = pivot.position.clone(), kPath = arcPath(kStart, bobKey.position.clone(), 1.2);
+    await animate(1000, k => { const e = smooth(k); pivot.position.copy(kPath.getPointAt(e)); pivot.rotation.y = (Math.PI / 2 - 0.5) * (1 - e); key.rotation.x = Math.PI / 2 * (1 - e); });
+    eyeTarget = null; scene.remove(pivot); temp.delete(pivot); bobKey.visible = true;
+  },
+  async primes(id) {
+    orbP.visible = orbQ.visible = true; orbN.visible = false;
+    const pa = PR.clone().add(V(-1.8, 0, 0)), qa = PR.clone().add(V(1.8, 0, 0));
+    await animate(900, k => { const e = smooth(k); orbP.scale.setScalar(e); orbQ.scale.setScalar(e); orbP.position.copy(pa); orbQ.position.copy(qa); });
+    if (id !== runId) return;
+    await animate(700);
+    await animate(1200, k => { const e = smooth(k); orbP.position.lerpVectors(pa, PR, e); orbQ.position.lerpVectors(qa, PR, e); orbP.scale.setScalar(1 - e * .7); orbQ.scale.setScalar(1 - e * .7); });
+    if (id !== runId) return;
+    orbP.visible = orbQ.visible = false; orbN.visible = true;
+    await animate(700, k => orbN.scale.setScalar(.3 + smooth(k) * .7));
+  },
+  async big(id) {
+    bigPanel.visible = true; eve.visible = tap.visible = eveBoard.mesh.visible = false;
+    await animate(1200, k => { bigPanel.scale.setScalar(.2 + smooth(k) * .8); bigPanel.material.opacity = smooth(k); });
+  },
+  async clockDemo(id) {
+    clock.visible = true; eve.visible = tap.visible = eveBoard.mesh.visible = false; await animate(600, k => clock.scale.setScalar(.3 + .7 * smooth(k)));
+    if (id !== runId) return;
+    drawClock('60 = 60', 'counting…', '');
+    if (!await animate(2600, k => { const e = 1 - Math.pow(1 - k, 3); setHand(60 * e); drawClock('60 = 60', `laps so far: ${Math.floor(60 * e / N)}`, ''); })) return;
+    drawClock('60 = 60', '1 full lap, then land on…', '60 mod 55 = 5'); marker.scale.setScalar(2.2);
+  },
+  async encrypt(id) {
+    S.alice = ['H I → 8 9', 'encrypting…']; applyState(S);
+    const c1 = await spinClock(8, E, 'enc', id); if (c1 === null) return;
+    S.alice = ['H I → 8 9', `8³ mod 55 = ${c1}`]; applyState(S); clock.visible = true;
+    const c2 = await spinClock(9, E, 'enc', id); if (c2 === null) return;
+    S.alice = ['H I → 8 9', `8³ mod 55 = ${c1}`, `9³ mod 55 = ${c2}`, `sends: ${c1} ${c2}`]; applyState(S); setHand(c2);
+  },
+  async decrypt(id) {
+    S.bob = ['Receives: 17 14', 'decrypting…']; applyState(S);
+    const m1 = await spinClock(17, D, 'dec', id, 3800); if (m1 === null) return;
+    S.bob = [`17²⁷ mod 55 = ${m1} → ${numLetter(m1)}`]; applyState(S);
+    const m2 = await spinClock(14, D, 'dec', id, 3800); if (m2 === null) return;
+    S.bob = [`17²⁷ mod 55 = ${m1} → ${numLetter(m1)}`, `14²⁷ mod 55 = ${m2} → ${numLetter(m2)}`, 'Message: "HI"']; applyState(S); setHand(m2);
+  },
+};
+async function spawnEveCopy(id) {
+  const ghost = makeBox(true); ghost.userData.face('?'); scene.add(ghost); temp.add(ghost);
+  ghost.position.copy(box.position);
+  if (!await moveObj(ghost, arcPath(box.position.clone(), POS.eveBox.clone(), 2.2), 1500, id)) return;
+  scene.remove(ghost); temp.delete(ghost); S.eveBox = true; S.eve = ['Has a copy of', 'the box…', 'CAN\'T OPEN IT']; applyState(S);
+  await animate(1200, k => { const tug = Math.sin(k * Math.PI * 3); eveBox.rotation.z = tug * 0.06; evePadOnBox.userData.setOpen(Math.max(0, tug) * 0.06); });
+  eveBox.rotation.z = 0; evePadOnBox.userData.setOpen(0);
+}
+
+/* ---------- free play: encrypt any word ---------- */
+let freePlay = false, busy = false;
+async function sendWord(word, id) {
+  const letters = word.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 8).split('');
+  if (!letters.length) return;
+  const ms = letters.map(letterNum), cs = ms.map(encrypt);
+  S.alice = [letters.join(' '), '→ ' + ms.join(' '), 'm³ mod 55:', '→ ' + cs.join(' ')];
+  S.bob = ['Receiving…']; S.eve = ['Sees:', '']; applyState(S);
+  const got = [], seen = [];
+  await Promise.all(cs.map((c, i) => (async () => {
+    await animate(i * 450); if (id !== runId) return;
+    const tok = tokenSprite(String(c), COL.green); tok.position.copy(ALICE).add(V(1.8, 1.6, 0));
+    const path = crossPath(ALICE.clone().add(V(1.8, 1.6, 0)), BOB.clone().add(V(-1.8, 1.6, 0)));
+    eyeTarget = tok;
+    let copied = false;
+    const ok = await animate(2600, k => {
+      tok.position.copy(path.getPointAt(smooth(k)));
+      if (!copied && tok.position.x > 0) { copied = true; seen[i] = c; S.eve = ['Sees:', seen.filter(x => x != null).join(' '), 'can\'t decrypt'];
+        if (seen.filter(x => x != null).length > 6) S.eve = ['Sees:', seen.filter(x => x != null).join(' ')]; applyState(S); }
+    });
+    scene.remove(tok); temp.delete(tok);
+    if (!ok || id !== runId) return;
+    got[i] = numLetter(decrypt(c));
+    S.bob = ['c²⁷ mod 55:', got.map(x => x || '·').join(' ')]; applyState(S);
+  })()));
+  if (id !== runId) return;
+  eyeTarget = null;
+  S.bob = ['c²⁷ mod 55:', got.join(' '), `Message: "${got.join('')}"`]; applyState(S);
+}
+function bindTry() {
+  const btn = $('send'), inp = $('word'); if (!btn) return;
+  const go = async () => { if (!freePlay || busy) return; busy = true; $('try').classList.add('busy'); await sendWord(inp.value, runId); busy = false; $('try')?.classList.remove('busy'); };
+  btn.onclick = go; inp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') go(); });
+}
+
+/* =========================================================
+   RUNNING STEPS
+   ========================================================= */
+let current = -1, autoplay = false, autoTimer = null, S = structuredClone(S0), focusOn = null;
+const VIEWS = {
+  overview:  [V(0, 9.5, 23), V(0, 1.6, 0)],
+  bob:       [V(7.5, 4.8, 10), V(10.8, 2.2, -0.5)],
+  alice:     [V(-7, 4.6, 9.5), V(-10, 1.8, 0)],
+  aliceClose:[V(-8.4, 3.0, 7.4), V(-10.2, 1.5, 1.6)],
+  bobClose:  [V(13.2, 3.4, 8.2), V(10.4, 1.7, 1.8)],
+  eve:       [V(-2.5, 5.5, 10), V(0, 2.4, -3)],
+  primes:    [V(7.5, 7.2, 11.5), V(10, 5.4, -1)],
+  big:       [V(0, 6.6, 14.5), V(0, 5.4, 1.5)],
+  clock:     [V(-1.8, 7.1, 11.6), V(-0.6, 6.1, 2)],
+  clockWide: [V(-2.5, 7.4, 16), V(-1.2, 5.1, 2)],
+};
+let flight = null;
+function flyTo(name, ms = 1800) {
+  const [p, t] = VIEWS[name]; const pos = p.clone();
+  const aspect = innerWidth / innerHeight; if (aspect < 1.1) pos.sub(t).multiplyScalar(1 + (1.1 - aspect) * 2).add(t);
+  flight = { p0: camera.position.clone(), t0: controls.target.clone(), p1: pos, t1: t.clone(), start: performance.now(), ms };
+}
+function go(i) {
+  if (i < 0 || i >= STEPS.length) return;
+  const id = ++runId; cancelAll(); clearTimeout(autoTimer); eyeTarget = null; freePlay = false; busy = false;
+  current = i; const step = STEPS[i];
+  S = structuredClone(i > 0 ? SNAP[i - 1] : S0);
+  if (step.chapter) S.chapter = step.chapter;
+  applyState(S);
+  focusOn = step.focus || null;
+  $('storyBody').innerHTML = `<div class="fade-in"><div class="kicker">${step.kicker}</div><h2>${step.title}</h2><div class="text">${step.text}</div></div>`;
+  bindTry();
+  $('count').textContent = `${i + 1} / ${STEPS.length}`;
+  $('bar').style.width = `${((i + 1) / STEPS.length) * 100}%`;
+  $('prev').disabled = i === 0; $('prev').style.opacity = i === 0 ? .35 : 1;
+  const last = i === STEPS.length - 1;
+  $('next').textContent = last ? '↺ Start again' : 'Next →';
+  flyTo(step.view);
+  (async () => {
+    await animate(step.acts ? 1000 : 0);
+    for (const a of step.acts || []) { if (id !== runId) return; await ACTIONS[a.do](id); }
+    if (id !== runId) return;
+    temp.forEach(o => scene.remove(o)); temp.clear();
+    S = structuredClone(SNAP[i]); applyState(S);
+    if (step.free) freePlay = true;
+    if (autoplay && !last) {
+      const read = Math.min(9500, 2800 + step.text.replace(/<[^>]+>/g, '').length * 26);
+      autoTimer = setTimeout(() => { if (id === runId) go(i + 1); }, read);
+    } else if (last) setAuto(false);
+  })();
+}
+function setAuto(on) { autoplay = on; $('auto').setAttribute('aria-pressed', String(on)); $('auto').textContent = on ? '❚❚ Pause' : '▶ Auto'; }
+$('next').onclick = () => current === STEPS.length - 1 ? go(0) : go(current + 1);
+$('prev').onclick = () => go(current - 1);
+$('auto').onclick = () => { setAuto(!autoplay); if (autoplay) go(current === STEPS.length - 1 ? 0 : current + 1); };
+addEventListener('keydown', e => {
+  if (!$('intro').classList.contains('gone')) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); enter(); } return; }
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); $('next').click(); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); go(current - 1); }
+  if (e.key === 'a' || e.key === 'A') $('auto').click();
+});
+controls.addEventListener('start', () => { flight = null; controls.autoRotate = false; });
+function enter() {
+  if ($('intro').classList.contains('gone')) return;
+  $('intro').classList.add('gone'); controls.autoRotate = false;
+  setTimeout(() => { $('story').classList.remove('hidden'); $('chapters').classList.add('show'); }, 900);
+  go(0); flight.ms = 3400;
+}
+$('enter').onclick = enter;
+
+/* =========================================================
+   LOOP
+   ========================================================= */
+const clk = new THREE.Clock();
+applyState(S); orbP.visible = orbQ.visible = false;
+const lookTmp = new THREE.Vector3(), qTmp = new THREE.Quaternion(), mTmp = new THREE.Matrix4();
+function tick() {
+  const dt = Math.min(clk.getDelta(), 0.05), t = clk.elapsedTime, now = performance.now();
+  for (const a of [...anims]) { const k = Math.min((now - a.t0) / a.ms, 1); a.fn(k); if (k >= 1) { anims.delete(a); a.res(true); } }
+  if (flight) {
+    const k = Math.min((now - flight.start) / flight.ms, 1), e = k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+    camera.position.lerpVectors(flight.p0, flight.p1, e); controls.target.lerpVectors(flight.t0, flight.t1, e);
+    if (k >= 1) flight = null;
+  }
+  controls.update();
+
+  // Eve's eye follows whatever is crossing the internet (or the viewer)
+  if (eyeTarget) eyeTarget.getWorldPosition(lookTmp); else lookTmp.copy(camera.position);
+  mTmp.lookAt(lookTmp, eve.position, V(0, 1, 0)); qTmp.setFromRotationMatrix(mTmp);
+  // Matrix4.lookAt points -z; flip so the iris (+z) faces the target
+  eyeball.quaternion.slerp(qTmp, Math.min(1, dt * 5));
+  eveRing.rotation.x = t * .6; eveRing.rotation.y = t * .4; eveRing2.rotation.y = -t * .5; eveRing2.rotation.z = t * .3;
+  eve.position.y = EVE.y + Math.sin(t * 1.2) * 0.12;
+
+  // gentle life
+  [alice, bob].forEach((p, i) => { p.head.position.y = 2.0 + Math.sin(t * 1.6 + i) * 0.03; });
+  const pulse = 0.5 + 0.5 * Math.sin(t * 3);
+  [alice, bob].forEach((p, i) => p.fig.children[2].scale.setScalar(focusOn === (i ? 'bob' : 'alice') ? 1 + pulse * .25 : 1));
+  if (bobPad.visible) { bobPad.position.y = 1.5 + Math.sin(t * 1.4) * 0.08; bobPad.rotation.y += dt * .5; }
+  if (bobKey.visible) { bobKey.position.y = 1.5 + Math.sin(t * 1.4 + 1) * 0.08; bobKey.rotation.y -= dt * .5; }
+  if (evePad.visible) evePad.rotation.y += dt * .4;
+  if (orbN.visible) orbN.userData.ring.rotation.x = t * .8;
+  if (marker.scale.x > 1) marker.scale.setScalar(Math.max(1, marker.scale.x - dt * .3) + pulse * .15);
+  noSprite.material.opacity = 0.6 + 0.4 * pulse;
+  lanes.forEach(l => { l.t.offset.x += dt * 0.35 * l.dir; });
+
+  const pa = pGeo.attributes.position.array;
+  for (let i = 0; i < NP; i++) { pa[i * 3 + 1] += dt * (0.08 + ps[i] * 0.15); if (pa[i * 3 + 1] > 22) pa[i * 3 + 1] = 0; }
+  pGeo.attributes.position.needsUpdate = true;
+  composer.render();
+  requestAnimationFrame(tick);
+}
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); });
+$('loading').classList.add('done');
+window.__rsa = { go };
+tick();
+</script>
+</body>
+</html>

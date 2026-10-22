@@ -1,0 +1,684 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>How RAM Works · Journey</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+  .c-os { color: var(--violet); } .c-br { color: var(--cyan); } .c-mu { color: var(--pink); } .c-ga { color: var(--green); } .c-ph { color: var(--amber); }
+  .story .text .c-os, .story .text .c-br, .story .text .c-mu, .story .text .c-ga, .story .text .c-ph { font-weight: 600; }
+
+  .intro { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; text-align: center; padding: 24px;
+    background: radial-gradient(ellipse at center, rgba(5,7,11,.35), rgba(5,7,11,.92) 70%); transition: opacity 1.2s ease, visibility 1.2s; }
+  .intro.gone { opacity: 0; visibility: hidden; }
+  .intro h1 { font-size: clamp(38px, 7vw, 84px); line-height: .98; letter-spacing: -.035em; font-weight: 600; margin: 18px 0 20px; }
+  .intro h1 em { font-style: normal; color: transparent; -webkit-text-stroke: 1.2px rgba(234,240,247,.6); }
+  .intro p { max-width: 520px; margin: 0 auto 30px; color: var(--muted); font-size: 16.5px; line-height: 1.6; }
+  .intro .btn.primary { height: 48px; padding: 0 26px; font-size: 15px; border-radius: 999px; box-shadow: 0 0 40px rgba(125,255,176,.22); }
+  .intro .keys { margin-top: 22px; font: 400 11px var(--mono); color: var(--dim); letter-spacing: .1em; }
+
+  /* top HUD: power + RAM usage */
+  .hud { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 9; display: flex; align-items: center; gap: 14px;
+    padding: 8px 16px; border-radius: 999px; font: 500 11px var(--mono); letter-spacing: .12em; color: var(--muted); opacity: 0; transition: opacity .6s; white-space: nowrap; }
+  .hud.show { opacity: 1; }
+  .pw { display: flex; align-items: center; gap: 8px; }
+  .pw i { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px var(--green); transition: all .4s; }
+  .pw.off i { background: #ff5a5a; box-shadow: 0 0 10px #ff5a5a; }
+  .meter { width: 120px; height: 6px; border-radius: 6px; background: rgba(255,255,255,.08); overflow: hidden; display: flex; }
+  .meter b { height: 100%; transition: width .5s; }
+  .hud .num { color: var(--ink); min-width: 52px; }
+
+  .story { position: fixed; left: 18px; bottom: 18px; z-index: 8; width: min(440px, calc(100vw - 36px)); padding: 22px 22px 18px; transition: opacity .6s, transform .6s; }
+  .story.hidden { opacity: 0; transform: translateY(20px); pointer-events: none; }
+  .story h2 { font-size: 24px; line-height: 1.15; font-weight: 600; letter-spacing: -.015em; margin: 8px 0 10px; }
+  .story .text { color: #c5cedb; font-size: 15px; line-height: 1.62; }
+  .story .text b { color: var(--ink); font-weight: 600; }
+  .story .text ul { list-style: none; margin-top: 4px; }
+  .story .text li { padding: 5px 0 5px 16px; position: relative; font-size: 14px; }
+  .story .text li::before { content: ""; position: absolute; left: 0; top: 13px; width: 6px; height: 6px; border-radius: 2px; background: var(--green); }
+  .cmp { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+  .cmp th { font: 700 12px var(--mono); text-align: left; padding: 6px 8px; color: var(--ink); border-bottom: 1px solid var(--line-strong); }
+  .cmp td { padding: 6px 8px; color: var(--muted); border-bottom: 1px solid var(--line); vertical-align: top; }
+  .cmp td:first-child { color: var(--dim); font: 400 11px var(--mono); text-transform: uppercase; letter-spacing: .06em; padding-left: 0; }
+  .story .row { display: flex; align-items: center; gap: 8px; margin-top: 18px; }
+  .story .row .spacer { flex: 1; }
+  .story .count { font: 400 11px var(--mono); color: var(--dim); letter-spacing: .08em; }
+  .progress { height: 2px; background: var(--line); margin-top: 14px; border-radius: 2px; overflow: hidden; }
+  .progress i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--violet), var(--cyan), var(--green)); transition: width .6s cubic-bezier(.2,.8,.2,1); }
+  .fade-in { animation: rise .5s cubic-bezier(.2,.8,.2,1); }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .linkbtn { color: var(--green); text-decoration: none; font-weight: 500; }
+  .linkbtn:hover { text-decoration: underline; }
+  .play { margin-top: 12px; padding: 10px 12px; border-radius: 10px; border: 1px dashed rgba(125,255,176,.35); color: #c9ffe0; font-size: 13.5px; }
+
+  .tip { position: fixed; z-index: 8; pointer-events: none; padding: 6px 10px; border-radius: 8px; font: 500 12px var(--mono);
+    background: rgba(5,7,11,.85); border: 1px solid var(--line-strong); transform: translate(14px, 14px); opacity: 0; transition: opacity .15s; white-space: nowrap; }
+  .tip.show { opacity: 1; }
+
+  @media (max-width: 760px) {
+    .page-title { display: none; }
+    .hud { top: 60px; gap: 10px; padding: 7px 12px; font-size: 10px; }
+    .meter { width: 70px; }
+    .story { left: 8px; right: 8px; bottom: 8px; width: auto; padding: 16px 16px 14px; max-height: 50dvh; overflow-y: auto; }
+    .story h2 { font-size: 20px; }
+    .story .text { font-size: 14px; }
+  }
+</style>
+</head>
+<body class="stage">
+<div class="loading" id="loading">CHARGING THE CELLS…</div>
+<canvas id="c" tabindex="0" aria-label="3D journey through RAM"></canvas>
+
+<header class="topbar">
+  <a class="back" href="index.html">← Computer Architecture</a>
+  <div class="page-title">RAM <span>/ main memory</span></div>
+</header>
+
+<div class="hud glass" id="hud" aria-hidden="true">
+  <span class="pw" id="pw"><i></i><span id="pwText">POWER ON</span></span>
+  <span>RAM IN USE</span>
+  <span class="meter" id="meter"></span>
+  <span class="num" id="used">0 / 64</span>
+</div>
+
+<section class="intro" id="intro">
+  <div>
+    <div class="kicker">An immersive journey</div>
+    <h1>How <em>RAM</em><br>works</h1>
+    <p>Step inside the computer's working memory — a city of tiny storage locations, each with its own address, where every program you open comes to life.</p>
+    <button class="btn primary" id="enter">Switch on the computer</button>
+    <div class="keys">← → TO MOVE · SPACE FOR NEXT · DRAG TO LOOK AROUND</div>
+  </div>
+</section>
+
+<section class="story glass hidden" id="story" aria-live="polite">
+  <div id="storyBody"></div>
+  <div class="row">
+    <button class="btn icon" id="prev" aria-label="Previous step">←</button>
+    <button class="btn primary" id="next">Next →</button>
+    <button class="btn" id="auto" aria-pressed="false" title="Play automatically">▶ Auto</button>
+    <span class="spacer"></span>
+    <span class="count" id="count"></span>
+  </div>
+  <div class="progress"><i id="bar"></i></div>
+</section>
+<div class="tip" id="tip"></div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const $ = id => document.getElementById(id);
+await Promise.race([
+  Promise.all([document.fonts.load('600 64px "Space Grotesk"'), document.fonts.load('700 64px "JetBrains Mono"'), document.fonts.load('400 32px "JetBrains Mono"')]),
+  new Promise(r => setTimeout(r, 2500)),
+]);
+
+/* =========================================================
+   PROGRAMS (owners of memory)
+   ========================================================= */
+const COL = { cyan: 0x5ee6ff, amber: 0xffb547, violet: 0xa48cff, pink: 0xff6fae, blue: 0x6aa8ff, green: 0x7dffb0, red: 0xff5a5a };
+const APPS = {
+  os:      { name: 'OS',      c: COL.violet },
+  browser: { name: 'BROWSER', c: COL.cyan },
+  music:   { name: 'MUSIC',   c: COL.pink },
+  game:    { name: 'GAME',    c: COL.green },
+  photos:  { name: 'PHOTOS',  c: COL.amber },
+};
+const range = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+const val = (i, o) => ((i * 73 + o.length * 29 + 11) % 251) + 3;
+
+/* =========================================================
+   SCENE
+   ========================================================= */
+const canvas = $('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x04060a);
+scene.fog = new THREE.FogExp2(0x04060a, 0.024);
+const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 300);
+camera.position.set(30, 24, 55);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.06;
+controls.minDistance = 2.5; controls.maxDistance = 60; controls.maxPolarAngle = Math.PI * 0.495;
+controls.target.set(0, 3, 0); controls.autoRotate = true; controls.autoRotateSpeed = 0.25;
+scene.add(new THREE.HemisphereLight(0x8fa8ff, 0x05060a, 0.7));
+const dl = new THREE.DirectionalLight(0xffffff, 1.2); dl.position.set(5, 12, 8); scene.add(dl);
+
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const glowColor = (hex, k = 2.2) => new THREE.Color(hex).multiplyScalar(k);
+const hex = c => '#' + new THREE.Color(c).getHexString();
+function canvasTex(w, h, draw) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const g = cv.getContext('2d'); draw && draw(g, w, h);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  return { cv, g, t };
+}
+function rr(g, x, y, w, h, r) { g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); }
+const SANS = '"Space Grotesk", system-ui, sans-serif', MONO = '"JetBrains Mono", ui-monospace, monospace';
+
+const glowing = [];
+function glassBox(w, h, d, edgeHex) {
+  const body = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 2, Math.min(w, h, d) * 0.12),
+    new THREE.MeshStandardMaterial({ color: 0x121c2c, emissive: 0x060b14, roughness: 0.35, metalness: 0.45 }));
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w, h, d)), new THREE.LineBasicMaterial({ color: glowColor(edgeHex, 1.6) }));
+  edges.scale.setScalar(0.995); body.add(edges);
+  const ent = { edges, base: new THREE.Color(edgeHex), glow: 0, flash: 0, k: 1.6, dim: 1 };
+  glowing.push(ent); body.userData.ent = ent; return body;
+}
+function textSprite(text, colorHex, { size = 0.34, bg = 'rgba(6,9,14,.88)', font = MONO, weight = 700 } = {}) {
+  const fs = 64, pad = 30;
+  const tmp = document.createElement('canvas').getContext('2d'); tmp.font = `${weight} ${fs}px ${font}`;
+  const w = Math.ceil(tmp.measureText(text).width) + pad * 2, h = fs + 34;
+  const { t } = canvasTex(w, h, g => {
+    if (bg) { rr(g, 2, 2, w - 4, h - 4, h / 2 - 2); g.fillStyle = bg; g.fill(); g.lineWidth = 3; g.strokeStyle = hex(colorHex); g.stroke(); }
+    g.font = `${weight} ${fs}px ${font}`; g.fillStyle = bg ? '#ffffff' : hex(colorHex); g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(text, w / 2, h / 2 + 3);
+  });
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true }));
+  s.scale.set(size * w / h, size, 1); s.renderOrder = 20; return s;
+}
+function floorText(text, w, h, colorHex, opacity = 0.75) {
+  const px = 160;
+  const { t } = canvasTex(Math.round(w * px), Math.round(h * px), (g, cw, ch) => {
+    g.font = `500 ${ch * 0.62}px ${MONO}`; g.fillStyle = hex(colorHex); g.textBaseline = 'middle';
+    if ('letterSpacing' in g) g.letterSpacing = `${ch * 0.12}px`;
+    g.fillText(text, 4, ch / 2);
+  });
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; return m;
+}
+
+/* ---------- ground grid ---------- */
+const groundMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, uniforms: { uColor: { value: new THREE.Color(0x3d6a9a) }, uPow: { value: 1 } },
+  vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+  fragmentShader: `uniform vec3 uColor; uniform float uPow; varying vec3 vW;
+    float grid(vec2 p, float s){ vec2 q = p / s; vec2 g = abs(fract(q - .5) - .5) / fwidth(q); return 1. - min(min(g.x, g.y), 1.); }
+    void main(){ float d = length(vW.xz); float fade = 1. - smoothstep(6., 34., d);
+      float l = (grid(vW.xz, 1.) * .22 + grid(vW.xz, 5.) * .45) * uPow; gl_FragColor = vec4(uColor * l * fade, l * fade); }`,
+});
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(260, 260), groundMat);
+ground.rotation.x = -Math.PI / 2; scene.add(ground);
+
+/* ---------- the RAM wall: 64 locations ---------- */
+const N = 64, COLS = 8, CW = 1.45, CH = 0.95;
+const cellPos = i => V(((i % COLS) - 3.5) * CW, 0.75 + Math.floor(i / COLS) * CH, 0);
+const cells = [];
+for (let i = 0; i < N; i++) {
+  const box = glassBox(1.32, 0.82, 0.5, 0x2a3446);
+  box.position.copy(cellPos(i)); box.userData.cell = i; scene.add(box);
+  const disp = canvasTex(264, 164);
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 0.8), new THREE.MeshBasicMaterial({ map: disp.t, transparent: true, color: 0xeeeeee }));
+  face.position.copy(cellPos(i)).add(V(0, 0, 0.26)); face.userData.cell = i; scene.add(face);
+  cells.push({ box, face, disp, drawn: null });
+}
+const wallTop = 0.75 + 7 * CH + 0.55;
+const frame = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(COLS * CW + 0.5, 8 * CH + 0.5, 0.9)), new THREE.LineBasicMaterial({ color: glowColor(COL.green, 0.7) }));
+frame.position.set(0, 0.75 + 3.5 * CH, 0); scene.add(frame);
+const ramLabel = textSprite('RAM · MAIN MEMORY', COL.green, { size: 0.5, bg: null }); ramLabel.position.set(0, wallTop + 0.55, 0); scene.add(ramLabel);
+
+// row / column select beams (how an address picks one location)
+const beamMat = new THREE.MeshBasicMaterial({ color: glowColor(COL.green, 1.15), transparent: true, opacity: 0, depthWrite: false });
+const rowBeam = new THREE.Mesh(new THREE.BoxGeometry(COLS * CW + 1.2, 0.022, 0.022), beamMat);
+const colBeam = new THREE.Mesh(new THREE.BoxGeometry(0.022, 8 * CH + 1.2, 0.022), beamMat);
+rowBeam.position.z = colBeam.position.z = 0.42; colBeam.position.y = 0.75 + 3.5 * CH;
+scene.add(rowBeam, colBeam);
+
+function drawCell(i, c, power, sel) {
+  const key = JSON.stringify([c, power, sel]); const cell = cells[i]; if (cell.drawn === key) return; cell.drawn = key;
+  const { g, cv, t } = cell.disp, w = cv.width, h = cv.height;
+  const col = c ? hex(APPS[c.o].c) : '#3a4454';
+  g.clearRect(0, 0, w, h);
+  g.fillStyle = sel ? 'rgba(40,70,60,.7)' : (c && power ? 'rgba(10,16,26,.7)' : 'rgba(6,9,14,.6)'); g.fillRect(0, 0, w, h);
+  g.textBaseline = 'middle';
+  g.fillStyle = power ? '#8794a6' : '#3a4454'; g.font = `500 22px ${MONO}`; g.fillText('#' + i, 14, 26);
+  if (c && power) { g.fillStyle = col; g.font = `700 18px ${MONO}`; g.textAlign = 'right'; g.fillText(APPS[c.o].name, w - 14, 26); g.textAlign = 'left'; }
+  const bits = c && power ? c.v.toString(2).padStart(8, '0') : '00000000';
+  for (let b = 0; b < 8; b++) {
+    const on = c && power && bits[b] === '1';
+    g.beginPath(); g.arc(28 + b * 29.5, 86, 11, 0, Math.PI * 2);
+    g.fillStyle = on ? col : 'rgba(255,255,255,.07)'; g.fill();
+    if (on) { g.shadowColor = col; g.shadowBlur = 10; g.fill(); g.shadowBlur = 0; }
+  }
+  g.font = `500 21px ${MONO}`; g.fillStyle = c && power ? '#d6dde8' : '#2c3442'; g.textAlign = 'center';
+  g.fillText(c && power ? bits.slice(0, 4) + ' ' + bits.slice(4) : 'empty', w / 2, 136); g.textAlign = 'left';
+  t.needsUpdate = true;
+}
+
+/* ---------- storage drive (SSD) ---------- */
+const persistent = new Set(); // non-volatile things stay lit when the power is off
+const SSD = V(-13.5, 0.4, 0.8);
+const ssd = glassBox(5.6, 0.8, 4.4, COL.blue); ssd.position.copy(SSD); scene.add(ssd);
+const ssdLabel = textSprite('STORAGE · SSD', COL.blue, { size: 0.42, bg: null }); ssdLabel.position.set(SSD.x, 2.6, SSD.z); scene.add(ssdLabel);
+const ssdNote = floorText('non-volatile · large · slower', 3.6, 0.26, COL.blue, .7); ssdNote.position.set(SSD.x - 2.6, 0.03, SSD.z + 2.65); scene.add(ssdNote);
+const appPos = {};
+Object.keys(APPS).forEach((k, n) => {
+  const p = V(SSD.x - 2.2 + n * 1.1, 0.8 + 0.3, SSD.z + 1.2);
+  const cube = glassBox(0.6, 0.6, 0.6, APPS[k].c); cube.position.copy(p); scene.add(cube);
+  const l = textSprite(APPS[k].name, APPS[k].c, { size: 0.2 }); l.position.copy(p).add(V(0, 0.62, 0)); scene.add(l);
+  appPos[k] = p; persistent.add(cube.userData.ent);
+});
+// virtual memory area on the drive
+const VM_C = V(SSD.x, 0.81, SSD.z - 1.0);
+const vmPlane = new THREE.Mesh(new THREE.PlaneGeometry(4.8, 1.7), new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false,
+  map: canvasTex(480, 170, (g, w, h) => { g.strokeStyle = 'rgba(106,168,255,.35)'; g.lineWidth = 3; for (let x = -h; x < w; x += 18) { g.beginPath(); g.moveTo(x, h); g.lineTo(x + h, 0); g.stroke(); } g.strokeStyle = 'rgba(106,168,255,.7)'; g.strokeRect(2, 2, w - 4, h - 4); }).t }));
+vmPlane.rotation.x = -Math.PI / 2; vmPlane.position.copy(VM_C); scene.add(vmPlane);
+const vmLabel = floorText('VIRTUAL MEMORY', 2.6, 0.3, COL.blue, .9); vmLabel.position.set(VM_C.x - 1.3, 0.83, VM_C.z + 0.62); scene.add(vmLabel);
+const vmGroup = new THREE.Group(); scene.add(vmGroup);
+const vmSlot = k => V(VM_C.x - 2.0 + (k % 8) * 0.55, 1.0, VM_C.z - 0.3 + Math.floor(k / 8) * 0.5);
+
+/* ---------- CPU and ROM ---------- */
+const CPU = V(13.5, 0.45, 0.8);
+const cpu = glassBox(3.6, 0.9, 3.6, COL.cyan); cpu.position.copy(CPU); scene.add(cpu);
+const cpuLabel = textSprite('CPU', COL.cyan, { size: 0.5, bg: null }); cpuLabel.position.set(CPU.x, 2.4, CPU.z); scene.add(cpuLabel);
+const cpuDisp = canvasTex(720, 180);
+const cpuFace = new THREE.Mesh(new THREE.PlaneGeometry(3.5, 0.86), new THREE.MeshBasicMaterial({ map: cpuDisp.t, transparent: true, color: 0xeeeeee }));
+cpuFace.position.set(CPU.x, CPU.y, CPU.z + 1.805); scene.add(cpuFace);
+let cpuDrawn = null;
+function drawCPU(text, power) {
+  const key = text + power; if (cpuDrawn === key) return; cpuDrawn = key;
+  const { g, cv, t } = cpuDisp, w = cv.width, h = cv.height; g.clearRect(0, 0, w, h);
+  g.fillStyle = 'rgba(6,10,16,.6)'; rr(g, 0, 0, w, h, 20); g.fill(); g.textBaseline = 'middle';
+  g.fillStyle = power ? '#5ee6ff' : '#2c3442'; g.font = `700 34px ${MONO}`; g.fillText('CPU', 28, 48);
+  g.fillStyle = power ? '#ffffff' : '#2c3442'; g.font = `700 50px ${MONO}`; g.fillText(power ? (text || 'ready') : 'no power', 28, 122);
+  t.needsUpdate = true;
+}
+const ROM = V(13.5, 0.3, -2.4);
+const rom = glassBox(2.2, 0.6, 1.2, COL.amber); rom.position.copy(ROM); scene.add(rom);
+persistent.add(rom.userData.ent); persistent.add(ssd.userData.ent);
+const romDisp = canvasTex(440, 120, (g, w, h) => {
+  g.fillStyle = 'rgba(16,10,4,.7)'; rr(g, 0, 0, w, h, 14); g.fill(); g.textBaseline = 'middle';
+  g.fillStyle = '#ffb547'; g.font = `700 44px ${MONO}`; g.fillText('ROM', 22, 42);
+  g.fillStyle = '#d9c39c'; g.font = `400 21px ${MONO}`; g.fillText('start-up instructions', 22, 90);
+});
+const romFace = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 0.57), new THREE.MeshBasicMaterial({ map: romDisp.t, transparent: true, color: 0xeeeeee }));
+romFace.position.set(ROM.x, ROM.y, ROM.z + 0.605); scene.add(romFace);
+
+/* ---------- the buses on the floor ---------- */
+const LANE_Z = 1.9;
+function flowTex() {
+  const { t } = canvasTex(512, 16, (g, w) => {
+    for (let i = 0; i < 4; i++) { const x = i * w / 4; const gr = g.createLinearGradient(x, 0, x + w / 4, 0);
+      gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(.75, 'rgba(255,255,255,.15)'); gr.addColorStop(.97, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = gr; g.fillRect(x, 0, w / 4, 16); }
+  });
+  t.wrapS = THREE.RepeatWrapping; return t;
+}
+const flowA = flowTex(), flowB = flowTex();
+const lanes = [];
+function lane(x0, x1, z, width, colorHex, tex, dir) {
+  const len = x1 - x0, t = tex.clone(); t.needsUpdate = true; t.repeat.x = dir * len / 4;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(len, width), new THREE.MeshBasicMaterial({ map: t, color: glowColor(colorHex, 2), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; m.position.set((x0 + x1) / 2, 0.03, z); scene.add(m);
+  lanes.push({ t, dir, mat: m.material, colorHex });
+}
+lane(SSD.x + 2.8, -6.2, LANE_Z - 0.12, 0.16, COL.blue, flowA, 1); lane(SSD.x + 2.8, -6.2, LANE_Z + 0.12, 0.16, COL.blue, flowB, -1);
+lane(-6.2, CPU.x - 1.8, LANE_Z - 0.12, 0.16, COL.cyan, flowA, 1); lane(-6.2, CPU.x - 1.8, LANE_Z + 0.12, 0.16, COL.cyan, flowB, -1);
+const t1 = floorText('↔  STORAGE LINK', 3.2, 0.3, COL.blue, .7); t1.position.set(-9.6, 0.03, LANE_Z + 0.55); scene.add(t1);
+const t2 = floorText('↔  MEMORY BUS  (RAM ↔ CPU)', 4.6, 0.3, COL.cyan, .7); t2.position.set(7.4, 0.03, LANE_Z + 0.55); scene.add(t2);
+
+/* ---------- atmosphere + post ---------- */
+const NP = 600, pp = new Float32Array(NP * 3), ps = new Float32Array(NP);
+for (let i = 0; i < NP; i++) { pp[i * 3] = (Math.random() - .5) * 70; pp[i * 3 + 1] = Math.random() * 22; pp[i * 3 + 2] = (Math.random() - .5) * 70; ps[i] = Math.random(); }
+const pGeo = new THREE.BufferGeometry(); pGeo.setAttribute('position', new THREE.BufferAttribute(pp, 3));
+const haloTex = canvasTex(128, 128, (g, w, h) => { const r = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+  r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(.25, 'rgba(255,255,255,.35)'); r.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = r; g.fillRect(0, 0, w, h); }).t;
+const motes = new THREE.Points(pGeo, new THREE.PointsMaterial({ map: haloTex, color: 0x9fffd0, size: 0.12, transparent: true, opacity: .5, depthWrite: false, blending: THREE.AdditiveBlending }));
+scene.add(motes);
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.85, 0.55, 1.0));
+composer.addPass(new OutputPass());
+
+/* =========================================================
+   PACKETS & ANIMATION
+   ========================================================= */
+const anims = new Set();
+const animate = (ms, fn = () => {}) => new Promise(res => anims.add({ t0: performance.now(), ms, fn, res }));
+const packets = new Set();
+function cancelAll() { anims.forEach(a => a.res(false)); anims.clear(); packets.forEach(p => p.dispose()); packets.clear(); }
+const smooth = k => k * k * (3 - 2 * k);
+const coreGeo = new THREE.SphereGeometry(0.11, 16, 16), trailGeo = new THREE.SphereGeometry(0.06, 8, 8);
+function makePacket(text, c, small) {
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(coreGeo, new THREE.MeshBasicMaterial({ color: glowColor(c, 4) })));
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, color: c, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+  halo.scale.setScalar(1.1); g.add(halo);
+  if (text !== '' && text != null) { const l = textSprite(String(text), c, { size: small ? 0.24 : 0.32 }); l.position.y = 0.42; g.add(l); }
+  scene.add(g);
+  const tm = new THREE.MeshBasicMaterial({ color: glowColor(c, 2), transparent: true, opacity: .8 });
+  const trail = Array.from({ length: 10 }, (_, i) => { const m = new THREE.Mesh(trailGeo, tm); m.scale.setScalar(1 - i / 10); m.visible = false; scene.add(m); return m; });
+  const hist = [];
+  const p = { set(pos) { g.position.copy(pos); hist.unshift(pos.clone()); if (hist.length > 30) hist.pop(); trail.forEach((m, i) => { const h = hist[i * 3]; if (h) { m.position.copy(h); m.visible = true; } }); },
+    dispose() { scene.remove(g); trail.forEach(m => scene.remove(m)); packets.delete(p); } };
+  packets.add(p); return p;
+}
+function polyline(pts) {
+  const segs = []; let total = 0;
+  for (let i = 0; i < pts.length - 1; i++) { const l = pts[i].distanceTo(pts[i + 1]); segs.push(l); total += l; }
+  return { total, at(k) { let d = k * total; for (let i = 0; i < segs.length; i++) { if (d <= segs[i] || i === segs.length - 1) return pts[i].clone().lerp(pts[i + 1], Math.min(d / (segs[i] || 1), 1)); d -= segs[i]; } } };
+}
+const LP = x => V(x, 0.1, LANE_Z);
+function route(spec) {
+  const [a, b] = spec.split('>');
+  const cellPts = i => { const p = cellPos(i); return [p.clone().add(V(0, 0, 0.3)), p.clone().add(V(0, 0, 0.9)), LP(p.x)]; };
+  if (a.startsWith('APP:')) { const p = appPos[a.slice(4)]; const i = +b.slice(5);
+    return [p, p.clone().add(V(0, 0.8, 0)), V(SSD.x + 2.8, 0.4, LANE_Z), LP(SSD.x + 3), ...cellPts(i).reverse()]; }
+  if (a.startsWith('CELL:') && b === 'CPU') return [...cellPts(+a.slice(5)), LP(CPU.x - 1.9), V(CPU.x - 1.2, 1.1, CPU.z + 0.6)];
+  if (a === 'CPU' && b.startsWith('CELL:')) return [V(CPU.x - 1.2, 1.1, CPU.z + 0.6), LP(CPU.x - 1.9), ...cellPts(+b.slice(5)).reverse()];
+  if (a.startsWith('CELL:') && b.startsWith('VM:')) return [...cellPts(+a.slice(5)), LP(SSD.x + 3), V(SSD.x + 2.8, 0.6, LANE_Z), vmSlot(+b.slice(3)).add(V(0, 0.4, 0)), vmSlot(+b.slice(3))];
+  if (a === 'ROM' && b === 'CPU') { const s = ROM.clone().add(V(0, 0.4, 0)), e = CPU.clone().add(V(0, 0.6, -0.6)); return new THREE.QuadraticBezierCurve3(s, s.clone().lerp(e, .5).add(V(0, 1.6, 0)), e).getPoints(24); }
+}
+
+/* =========================================================
+   STATE
+   ========================================================= */
+const blank = () => ({ power: false, cells: Array(N).fill(null), vm: [], cpu: '' });
+let S = blank();
+function render(st, sel = -1) {
+  st.cells.forEach((c, i) => {
+    drawCell(i, c, st.power, i === sel);
+    const ent = cells[i].box.userData.ent;
+    ent.base.setHex(c && st.power ? APPS[c.o].c : 0x2a3446);
+  });
+  drawCPU(st.cpu, st.power);
+  // VM blocks on the drive
+  while (vmGroup.children.length > st.vm.length) vmGroup.remove(vmGroup.children[vmGroup.children.length - 1]);
+  st.vm.forEach((o, k) => { if (!vmGroup.children[k]) { const b = glassBox(0.4, 0.3, 0.36, APPS[o].c); b.position.copy(vmSlot(k)); vmGroup.add(b); } });
+  // HUD
+  const used = st.power ? st.cells.filter(Boolean).length : 0;
+  $('used').textContent = `${used} / ${N}`;
+  const counts = {}; if (st.power) st.cells.forEach(c => c && (counts[c.o] = (counts[c.o] || 0) + 1));
+  $('meter').innerHTML = Object.keys(APPS).map(k => counts[k] ? `<b style="width:${counts[k] / N * 100}%;background:${hex(APPS[k].c)}"></b>` : '').join('');
+  $('pw').classList.toggle('off', !st.power); $('pwText').textContent = st.power ? 'POWER ON' : 'POWER OFF';
+  groundMat.uniforms.uPow.value = st.power ? 1 : 0.35;
+}
+function applySet(st, set) {
+  if (!set) return;
+  if ('power' in set) st.power = set.power;
+  if (set.cells) for (const i in set.cells) st.cells[i] = set.cells[i];
+  if (set.vm) st.vm = set.vm;
+  if ('cpu' in set) st.cpu = set.cpu;
+  if (set.wipe) st.cells = Array(N).fill(null);
+}
+const flashCell = i => { cells[i].box.userData.ent.flash = 1; };
+
+/* =========================================================
+   THE JOURNEY
+   ========================================================= */
+const loadAct = (o, list) => ({ load: o, list });
+const STEPS = [
+  { view: 'overview', kicker: 'Prologue', title: 'Meet RAM',
+    text: '<b>RAM</b> (Random Access Memory) is the computer\'s <b>main memory</b>. It holds the <b>programs and data that are currently in use</b>.<br><br>Think of storage as your bookshelf and RAM as your <b>desk</b>: whatever you are working on right now has to be on the desk. The CPU cannot run programs straight from storage — they are copied into RAM first.',
+    acts: [] },
+  { view: 'overview', kicker: 'Start-up', title: 'Switching on', focus: ['ROM'],
+    text: 'When the power comes on, RAM is completely empty. The CPU first runs the <b>start-up instructions</b> stored in <b>ROM</b>. These tell it to load the <span class="c-os">operating system</span> from storage into RAM.',
+    acts: [{ set: { power: true, cpu: 'starting…' } }, { wait: 500 }, { move: 'ROM>CPU', label: 'START-UP', c: COL.amber }, { set: { cpu: 'loading OS' } }, loadAct('os', range(0, 7)), { set: { cpu: 'ready' } }] },
+  { view: 'wall', kicker: 'Opening a program', title: 'Programs are copied into RAM', focus: ['APP:browser'],
+    text: 'You open a <span class="c-br">web browser</span>. Its instructions and data are <b>copied from storage into RAM</b>, filling empty locations. The original stays safely on the storage drive.',
+    acts: [loadAct('browser', range(8, 19))] },
+  { view: 'cell', kicker: 'Addresses', title: 'Every location has an address', focus: ['CELL:13'],
+    text: 'RAM is made of millions of numbered <b>locations</b>. Each has a unique <b>address</b> (this one is <b>#13</b>) and holds <b>one byte</b> — 8 bits, shown here as 8 lights.<br><br>The address selects one <b>row</b> and one <b>column</b>, and the location where they cross is the one used.',
+    acts: [{ probe: 13 }, { wait: 600 }, { probe: 13 }] },
+  { view: 'wall', kicker: 'Random access', title: 'Any location, instantly', focus: [],
+    text: '<b>Random access</b> means the CPU can go <b>directly</b> to any location, in any order — and every location takes the <b>same time</b> to reach.<br><br>Compare this with a video you have to fast-forward through: to reach the end you must pass everything before it (that is <b>sequential</b> access).',
+    acts: [{ probe: 5 }, { probe: 50 }, { probe: 17 }, { probe: 61 }, { probe: 30 }, { probe: 2 }] },
+  { view: 'read', kicker: 'Reading', title: 'Reading from RAM', focus: ['CELL:13'],
+    text: 'To <b>read</b>, the CPU sends an <b>address</b> along the memory bus. The location is selected and a <b>copy</b> of its contents travels back to the CPU.<br><br>Reading does not remove the data — it stays in RAM.',
+    acts: [{ set: { cpu: 'read #13' } }, { move: 'CPU>CELL:13', label: '#13', c: COL.blue }, { probe: 13 }, { move: 'CELL:13>CPU', label: 'BYTE', c: COL.cyan }, { setFn: st => ({ cpu: `#13 = ${st.cells[13].v.toString(2).padStart(8, '0')}` }) }] },
+  { view: 'read', kicker: 'Writing', title: 'Writing to RAM', focus: ['CELL:14'],
+    text: 'RAM can also be <b>written to</b>. The CPU sends an address <b>and</b> new data. The bits in that location flip to the new value — the <b>old value is overwritten</b>.<br><br>RAM is <b>read and write</b> memory.',
+    acts: [{ set: { cpu: 'write #14' } }, { par: [{ move: 'CPU>CELL:14', label: '#14', c: COL.blue }, { move: 'CPU>CELL:14', label: '10101010', c: COL.cyan, delay: 350 }] }, { probe: 14 }, { flip: 14, v: 170 }, { set: { cpu: 'saved to #14' } }] },
+  { view: 'wall', kicker: 'More programs', title: 'RAM fills up', focus: [],
+    text: 'You open a <span class="c-mu">music player</span> and a <span class="c-ga">game</span>. Each one takes up more locations. Watch the meter at the top — RAM is nearly full.<br><br>The <b>more RAM</b> a computer has, the more programs it can keep open at once.',
+    acts: [loadAct('music', range(20, 25)), loadAct('game', range(26, 45))] },
+  { view: 'vm', kicker: 'Virtual memory', title: 'When RAM is full', focus: ['VM'],
+    text: 'Now you open <span class="c-ph">photos</span>, but there is not enough free RAM. The operating system moves data that is <b>not currently being used</b> (the <span class="c-mu">music</span> player) out to a part of the storage drive called <b>virtual memory</b>, freeing space.<br><br>Storage is much <b>slower</b> than RAM, so relying on virtual memory makes a computer slow down. Adding more RAM fixes this.',
+    acts: [{ swap: 'music', list: range(20, 25) }, loadAct('photos', [...range(46, 63), 20, 21])] },
+  { view: 'overview', kicker: 'Volatile', title: 'Power off — everything vanishes', focus: ['ROM', 'SSD'],
+    text: 'Someone switches the computer off without saving. RAM needs electricity to hold its data, so <b>everything in it is lost</b> — RAM is <b>volatile</b>.<br><br>The <b>storage drive</b> and <b>ROM</b> keep their contents without power: they are <b>non-volatile</b>. That is why you must <b>save</b> your work to storage.',
+    acts: [{ wait: 400 }, { power: false }] },
+  { view: 'rom', kicker: 'RAM vs ROM', title: 'Two kinds of primary memory', focus: ['ROM'],
+    text: '<table class="cmp"><tr><th></th><th>RAM</th><th>ROM</th></tr><tr><td>Power off</td><td>Volatile — data is lost</td><td>Non-volatile — data kept</td></tr><tr><td>Access</td><td>Read <b>and</b> write</td><td>Read only</td></tr><tr><td>Holds</td><td>Programs and data in use</td><td>Start-up instructions (bootstrap)</td></tr><tr><td>Size</td><td>Large — gigabytes</td><td>Small</td></tr></table>',
+    acts: [] },
+  { view: 'wall', kicker: 'Summary', title: 'Your turn',
+    text: '<ul><li>RAM holds the <b>programs and data currently in use</b></li><li>Every location has an <b>address</b> and stores a byte</li><li>Any location can be accessed <b>directly</b> — random access</li><li>RAM is <b>read and write</b>, and <b>volatile</b></li><li>When RAM is full, <b>virtual memory</b> on storage is used — but it is slower</li></ul><div class="play">The computer is back on. <b>Click any location</b> in the wall to read it into the CPU.</div><div style="margin-top:12px"><a class="linkbtn" href="cache.html">Next: how cache memory works →</a></div>',
+    acts: [{ set: { power: true, cpu: 'loading OS' } }, loadAct('os', range(0, 7)), loadAct('browser', range(8, 19)), { set: { cpu: 'ready' } }], free: true },
+];
+
+// the state at the end of every step, so Back and jumping always show the right values
+function collect(acts, st) {
+  for (const a of acts || []) {
+    if (a.par) collect(a.par, st);
+    if (a.set) applySet(st, a.set);
+    if (a.setFn) applySet(st, a.setFn(st));
+    if (a.load) a.list.forEach(i => st.cells[i] = { o: a.load, v: val(i, a.load) });
+    if (a.flip !== undefined) st.cells[a.flip] = { ...st.cells[a.flip], v: a.v };
+    if (a.swap) { a.list.forEach(i => st.cells[i] = null); st.vm = [...st.vm, ...a.list.map(() => a.swap)]; }
+    if (a.power === false) { st.power = false; st.cells = Array(N).fill(null); st.vm = []; st.cpu = ''; }
+  }
+}
+const SNAP = []; { const st = blank(); STEPS.forEach(s => { collect(s.acts, st); SNAP.push(structuredClone(st)); }); }
+// the vm blocks should disappear once power is restored and reboots (they belong to the old session)
+
+/* =========================================================
+   RUNNING STEPS
+   ========================================================= */
+let current = -1, runId = 0, autoplay = false, autoTimer = null, focus = [], freePlay = false;
+const VIEWS = {
+  overview: [V(0, 9.5, 25), V(0, 2.6, 0)],
+  boot:     [V(6, 7.5, 19), V(2, 2.2, 0)],
+  wall:     [V(-1.6, 5.2, 15.5), V(-1.9, 3.9, 0)],
+  cell:     [V(3.0, 2.9, 6.6), V(1.6, 1.9, 0)],
+  read:     [V(8.5, 5.5, 13), V(6, 2.4, 0.5)],
+  vm:       [V(-11, 7.5, 11.5), V(-12, 0.6, 0)],
+  rom:      [V(9.5, 4.2, 9), V(12.5, 0.6, -0.6)],
+};
+let flight = null;
+function flyTo(name, ms = 1800) {
+  const [p, t] = VIEWS[name]; const pos = p.clone();
+  const aspect = innerWidth / innerHeight; if (aspect < 1.1) pos.sub(t).multiplyScalar(1 + (1.1 - aspect) * 2).add(t);
+  flight = { p0: camera.position.clone(), t0: controls.target.clone(), p1: pos, t1: t.clone(), start: performance.now(), ms };
+}
+let probeT = 0;
+async function probe(i, id) {
+  const p = cellPos(i); rowBeam.position.y = p.y; colBeam.position.x = p.x;
+  probeT = 1; render(S, i); flashCell(i);
+  await animate(650);
+  if (id === runId) render(S);
+}
+async function move(a, id) {
+  if (a.delay) await animate(a.delay);
+  if (id !== runId) return false;
+  const path = polyline(route(a.move));
+  const ms = Math.max(500, path.total / (a.speed || 9) * 1000);
+  const pk = makePacket(a.label, a.c, a.small);
+  const ok = await animate(ms, k => pk.set(path.at(smooth(k))));
+  pk.dispose();
+  return ok && id === runId;
+}
+async function runAct(a, id) {
+  if (id !== runId) return;
+  if (a.par) { await Promise.all(a.par.map(x => runAct(x, id))); return; }
+  if (a.wait) { await animate(a.wait); return; }
+  if (a.move) { if (await move(a, id) && a.set) { applySet(S, a.set); render(S); } return; }
+  if (a.set || a.setFn) { applySet(S, a.set || a.setFn(S)); render(S); await animate(250); return; }
+  if (a.probe !== undefined) { await probe(a.probe, id); return; }
+  if (a.load) {
+    const c = APPS[a.load].c;
+    await Promise.all(a.list.map((i, k) => (async () => {
+      await animate(k * 110); if (id !== runId) return;
+      if (await move({ move: `APP:${a.load}>CELL:${i}`, label: '', c, speed: 16 }, id)) { S.cells[i] = { o: a.load, v: val(i, a.load) }; flashCell(i); render(S); }
+    })()));
+    return;
+  }
+  if (a.swap) {
+    const c = APPS[a.swap].c; const base = S.vm.length;
+    await Promise.all(a.list.map((i, k) => (async () => {
+      await animate(k * 140); if (id !== runId) return;
+      S.cells[i] = null; render(S);
+      if (await move({ move: `CELL:${i}>VM:${base + k}`, label: k === 0 ? 'MUSIC' : '', c, speed: 14, small: true }, id)) { S.vm = [...S.vm, a.swap]; render(S); }
+    })()));
+    return;
+  }
+  if (a.flip !== undefined) {
+    const from = S.cells[a.flip].v, to = a.v;
+    for (let b = 7; b >= 0; b--) {
+      const mask = 1 << b; if ((from & mask) === (to & mask)) continue;
+      await animate(220); if (id !== runId) return;
+      S.cells[a.flip] = { ...S.cells[a.flip], v: (S.cells[a.flip].v & ~mask) | (to & mask) }; flashCell(a.flip); render(S, a.flip);
+    }
+    S.cells[a.flip] = { ...S.cells[a.flip], v: to }; render(S); return;
+  }
+  if (a.power === false) {
+    const order = S.cells.map((c, i) => i).filter(i => S.cells[i]).sort(() => Math.random() - .5);
+    S.cpu = ''; render(S);
+    await Promise.all(order.map((i, k) => (async () => { await animate(k * 22); if (id !== runId) return; S.cells[i] = null; render(S); })()));
+    S.power = false; S.vm = []; render(S); return;
+  }
+}
+function go(i) {
+  if (i < 0 || i >= STEPS.length) return;
+  const id = ++runId; cancelAll(); clearTimeout(autoTimer);
+  current = i; const step = STEPS[i]; freePlay = false;
+  S = structuredClone(i > 0 ? SNAP[i - 1] : blank());
+  if (i > 0 && STEPS[i].acts?.some(a => a.set?.power === true)) S.vm = []; // a fresh start-up clears old virtual memory
+  render(S);
+  focus = step.focus || [];
+  $('storyBody').innerHTML = `<div class="fade-in"><div class="kicker">${step.kicker}</div><h2>${step.title}</h2><div class="text">${step.text}</div></div>`;
+  $('count').textContent = `${i + 1} / ${STEPS.length}`;
+  $('bar').style.width = `${((i + 1) / STEPS.length) * 100}%`;
+  $('prev').disabled = i === 0; $('prev').style.opacity = i === 0 ? .35 : 1;
+  const last = i === STEPS.length - 1;
+  $('next').textContent = last ? '↺ Start again' : 'Next →';
+  flyTo(step.view);
+  (async () => {
+    await animate(step.acts?.length ? 900 : 0);
+    for (const a of step.acts || []) { if (id !== runId) return; await runAct(a, id); }
+    if (id !== runId) return;
+    S = structuredClone(SNAP[i]); render(S);
+    if (step.free) freePlay = true;
+    if (autoplay && !last) {
+      const read = Math.min(9000, 2600 + step.text.replace(/<[^>]+>/g, '').length * 28);
+      autoTimer = setTimeout(() => { if (id === runId) go(i + 1); }, read);
+    } else if (last) setAuto(false);
+  })();
+}
+function setAuto(on) { autoplay = on; $('auto').setAttribute('aria-pressed', String(on)); $('auto').textContent = on ? '❚❚ Pause' : '▶ Auto'; }
+$('next').onclick = () => current === STEPS.length - 1 ? go(0) : go(current + 1);
+$('prev').onclick = () => go(current - 1);
+$('auto').onclick = () => { setAuto(!autoplay); if (autoplay) go(current === STEPS.length - 1 ? 0 : current + 1); };
+addEventListener('keydown', e => {
+  if (!$('intro').classList.contains('gone')) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); enter(); } return; }
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); $('next').click(); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); go(current - 1); }
+  if (e.key === 'a' || e.key === 'A') $('auto').click();
+});
+controls.addEventListener('start', () => { flight = null; controls.autoRotate = false; });
+function enter() {
+  if ($('intro').classList.contains('gone')) return;
+  $('intro').classList.add('gone'); controls.autoRotate = false;
+  setTimeout(() => { $('story').classList.remove('hidden'); $('hud').classList.add('show'); }, 900);
+  go(0); flight.ms = 3400;
+}
+$('enter').onclick = enter;
+
+/* ---------- free play: click a location to read it ---------- */
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+const pickTargets = cells.map(c => c.box);
+let down = null, busy = false, hoverPt = null;
+const pickCell = (x, y) => { ndc.set(x / innerWidth * 2 - 1, -(y / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera); const h = ray.intersectObjects(pickTargets, false)[0]; return h ? h.object.userData.cell : null; };
+canvas.addEventListener('pointerdown', e => down = { x: e.clientX, y: e.clientY });
+canvas.addEventListener('pointermove', e => hoverPt = { x: e.clientX, y: e.clientY, type: e.pointerType });
+canvas.addEventListener('pointerleave', () => { hoverPt = null; $('tip').classList.remove('show'); });
+canvas.addEventListener('pointerup', async e => {
+  if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) return; down = null;
+  if (!freePlay || busy) return;
+  const i = pickCell(e.clientX, e.clientY); if (i === null) return;
+  busy = true; const id = runId;
+  S.cpu = `read #${i}`; render(S);
+  if (await move({ move: `CPU>CELL:${i}`, label: '#' + i, c: COL.blue, speed: 14 }, id)) {
+    await probe(i, id);
+    const c = S.cells[i];
+    if (await move({ move: `CELL:${i}>CPU`, label: c ? c.v.toString(2).padStart(8, '0') : 'empty', c: c ? APPS[c.o].c : 0x8794a6, speed: 14 }, id)) {
+      S.cpu = c ? `#${i} = ${c.v.toString(2).padStart(8, '0')}` : `#${i} is empty`; render(S);
+    }
+  }
+  busy = false;
+});
+
+/* =========================================================
+   LOOP
+   ========================================================= */
+const clk = new THREE.Clock();
+render(S);
+function tick() {
+  const dt = Math.min(clk.getDelta(), 0.05), t = clk.elapsedTime, now = performance.now();
+  for (const a of [...anims]) { const k = Math.min((now - a.t0) / a.ms, 1); a.fn(k); if (k >= 1) { anims.delete(a); a.res(true); } }
+  if (flight) {
+    const k = Math.min((now - flight.start) / flight.ms, 1), e = k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+    camera.position.lerpVectors(flight.p0, flight.p1, e); controls.target.lerpVectors(flight.t0, flight.t1, e);
+    if (k >= 1) flight = null;
+  }
+  controls.update();
+
+  const breathe = 0.5 + 0.5 * Math.sin(t * 3.2);
+  const pw = S.power ? 1 : 0.25;
+  const focused = new Set();
+  focus.forEach(f => {
+    if (f.startsWith('CELL:')) focused.add(cells[+f.slice(5)].box.userData.ent);
+    if (f === 'ROM') focused.add(rom.userData.ent);
+    if (f === 'SSD') focused.add(ssd.userData.ent);
+  });
+  for (const ent of glowing) {
+    const keepLit = persistent.has(ent) || vmGroup.children.some(b => b.userData.ent === ent);
+    const goal = focused.has(ent) ? 0.6 + 0.9 * breathe : 0;
+    ent.glow += (goal - ent.glow) * Math.min(dt * 6, 1);
+    ent.flash = Math.max(0, ent.flash - dt * 1.8);
+    ent.edges.material.color.copy(ent.base).multiplyScalar(ent.k * (keepLit ? 1 : pw) * (1 + ent.glow * 1.2 + ent.flash * 3));
+  }
+  probeT = Math.max(0, probeT - dt * 1.4); beamMat.opacity = Math.min(1, probeT * 1.6);
+  const vmFocus = focus.includes('VM');
+  vmPlane.material.opacity = vmFocus ? 0.6 + 0.4 * breathe : 0.6;
+  lanes.forEach(l => { l.t.offset.x += dt * 0.35 * l.dir; l.mat.opacity = S.power ? 1 : 0.15; });
+
+  // hover hint in free play
+  if (freePlay && hoverPt && hoverPt.type === 'mouse') {
+    const i = pickCell(hoverPt.x, hoverPt.y);
+    canvas.style.cursor = i !== null ? 'pointer' : '';
+    if (i !== null) { const tip = $('tip'); tip.textContent = `Read address #${i}`; tip.style.left = hoverPt.x + 'px'; tip.style.top = hoverPt.y + 'px'; tip.classList.add('show'); }
+    else $('tip').classList.remove('show');
+  } else if (!freePlay) { canvas.style.cursor = ''; $('tip').classList.remove('show'); }
+
+  const pa = pGeo.attributes.position.array;
+  for (let i = 0; i < NP; i++) { pa[i * 3 + 1] += dt * (0.08 + ps[i] * 0.15); if (pa[i * 3 + 1] > 22) pa[i * 3 + 1] = 0; }
+  pGeo.attributes.position.needsUpdate = true;
+  composer.render();
+  requestAnimationFrame(tick);
+}
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); });
+$('loading').classList.add('done');
+window.__ram = { go };
+tick();
+</script>
+</body>
+</html>

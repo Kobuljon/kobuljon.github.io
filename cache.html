@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>How Cache Works · Journey</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+  .hit { color: var(--green); font-weight: 600; } .miss { color: #ff6b6b; font-weight: 600; }
+  .l1 { color: var(--cyan); } .l2 { color: var(--violet); } .l3 { color: #7fb4ff; } .rm { color: var(--amber); }
+  .story .text .hit, .story .text .miss, .story .text .l1, .story .text .l2, .story .text .l3, .story .text .rm { font-weight: 600; }
+
+  .intro { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; text-align: center; padding: 24px;
+    background: radial-gradient(ellipse at center, rgba(5,7,11,.35), rgba(5,7,11,.92) 70%); transition: opacity 1.2s ease, visibility 1.2s; }
+  .intro.gone { opacity: 0; visibility: hidden; }
+  .intro h1 { font-size: clamp(38px, 7vw, 84px); line-height: .98; letter-spacing: -.035em; font-weight: 600; margin: 18px 0 20px; }
+  .intro h1 em { font-style: normal; color: transparent; -webkit-text-stroke: 1.2px rgba(234,240,247,.6); }
+  .intro p { max-width: 520px; margin: 0 auto 30px; color: var(--muted); font-size: 16.5px; line-height: 1.6; }
+  .intro .btn.primary { height: 48px; padding: 0 26px; font-size: 15px; border-radius: 999px; box-shadow: 0 0 40px rgba(164,140,255,.25); }
+  .intro .keys { margin-top: 22px; font: 400 11px var(--mono); color: var(--dim); letter-spacing: .1em; }
+
+  /* scoreboard */
+  .hud { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 9; display: flex; gap: 4px; padding: 6px; border-radius: 16px; opacity: 0; transition: opacity .6s; }
+  .hud.show { opacity: 1; }
+  .stat { min-width: 84px; padding: 6px 12px; border-radius: 11px; text-align: center; }
+  .stat small { display: block; font: 500 9.5px var(--mono); letter-spacing: .14em; color: var(--dim); }
+  .stat b { display: block; font: 700 20px var(--mono); margin-top: 2px; transition: color .3s; }
+  .stat.h b { color: var(--green); } .stat.m b { color: #ff6b6b; } .stat.c b { color: var(--ink); }
+  .stat.pop { animation: pop .5s; }
+  @keyframes pop { 40% { background: rgba(255,255,255,.1); transform: scale(1.06); } }
+  .now { position: fixed; top: 82px; left: 50%; transform: translateX(-50%); z-index: 9; font: 400 11.5px var(--mono); color: var(--muted); letter-spacing: .08em; white-space: nowrap; transition: opacity .3s; }
+  .now b { color: var(--ink); }
+
+  .story { position: fixed; left: 18px; bottom: 18px; z-index: 8; width: min(450px, calc(100vw - 36px)); padding: 22px 22px 18px; transition: opacity .6s, transform .6s; }
+  .story.hidden { opacity: 0; transform: translateY(20px); pointer-events: none; }
+  .story h2 { font-size: 24px; line-height: 1.15; font-weight: 600; letter-spacing: -.015em; margin: 8px 0 10px; }
+  .story .text { color: #c5cedb; font-size: 15px; line-height: 1.62; }
+  .story .text b { color: var(--ink); font-weight: 600; }
+  .story .text ul { list-style: none; margin-top: 4px; }
+  .story .text li { padding: 5px 0 5px 16px; position: relative; font-size: 14px; }
+  .story .text li::before { content: ""; position: absolute; left: 0; top: 13px; width: 6px; height: 6px; border-radius: 2px; background: var(--violet); }
+  .levels { display: grid; grid-template-columns: auto 1fr auto; gap: 5px 12px; margin-top: 10px; font-size: 13px; align-items: baseline; }
+  .levels span:nth-child(3n+1) { font: 700 12px var(--mono); }
+  .levels span:nth-child(3n+2) { color: var(--muted); }
+  .levels span:nth-child(3n) { font: 400 11.5px var(--mono); color: var(--dim); text-align: right; }
+  .story .row { display: flex; align-items: center; gap: 8px; margin-top: 18px; }
+  .story .row .spacer { flex: 1; }
+  .story .count { font: 400 11px var(--mono); color: var(--dim); letter-spacing: .08em; }
+  .progress { height: 2px; background: var(--line); margin-top: 14px; border-radius: 2px; overflow: hidden; }
+  .progress i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--cyan), var(--violet), var(--amber)); transition: width .6s cubic-bezier(.2,.8,.2,1); }
+  .fade-in { animation: rise .5s cubic-bezier(.2,.8,.2,1); }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .addrs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .addrs button { font: 600 12.5px var(--mono); padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-strong); background: rgba(255,255,255,.04); color: var(--ink); cursor: pointer; transition: all .2s; }
+  .addrs button:hover { border-color: var(--violet); color: var(--violet); }
+  .addrs button.reset { color: var(--muted); border-style: dashed; }
+  .addrs.busy button { opacity: .45; pointer-events: none; }
+  .linkbtn { color: var(--violet); text-decoration: none; font-weight: 500; }
+  .linkbtn:hover { text-decoration: underline; }
+
+  @media (max-width: 760px) {
+    .page-title { display: none; }
+    .hud { top: 58px; }
+    .stat { min-width: 62px; padding: 4px 6px; }
+    .stat b { font-size: 15px; }
+    .now { top: 116px; font-size: 10.5px; }
+    .story { left: 8px; right: 8px; bottom: 8px; width: auto; padding: 16px 16px 14px; max-height: 50dvh; overflow-y: auto; }
+    .story h2 { font-size: 20px; }
+    .story .text { font-size: 14px; }
+  }
+</style>
+</head>
+<body class="stage">
+<div class="loading" id="loading">WARMING UP THE CACHE…</div>
+<canvas id="c" tabindex="0" aria-label="3D journey through cache memory"></canvas>
+
+<header class="topbar">
+  <a class="back" href="index.html">← Computer Architecture</a>
+  <div class="page-title">Cache <span>/ memory</span></div>
+</header>
+
+<div class="hud glass" id="hud" aria-live="polite">
+  <div class="stat h" id="sh"><small>HITS</small><b id="hits">0</b></div>
+  <div class="stat m" id="sm"><small>MISSES</small><b id="misses">0</b></div>
+  <div class="stat"><small>HIT RATE</small><b id="rate">–</b></div>
+  <div class="stat c" id="sc"><small>CYCLES</small><b id="cycles">0</b></div>
+</div>
+<div class="now" id="now"></div>
+
+<section class="intro" id="intro">
+  <div>
+    <div class="kicker">An immersive journey</div>
+    <h1>How <em>cache</em><br>memory works</h1>
+    <p>The CPU is incredibly fast — but main memory is far away. Ride along with every request and discover how a tiny, speedy memory saves the processor from endless waiting.</p>
+    <button class="btn primary" id="enter">Start the journey</button>
+    <div class="keys">← → TO MOVE · SPACE FOR NEXT · DRAG TO LOOK AROUND</div>
+  </div>
+</section>
+
+<section class="story glass hidden" id="story" aria-live="polite">
+  <div id="storyBody"></div>
+  <div class="row">
+    <button class="btn icon" id="prev" aria-label="Previous step">←</button>
+    <button class="btn primary" id="next">Next →</button>
+    <button class="btn" id="auto" aria-pressed="false" title="Play automatically">▶ Auto</button>
+    <span class="spacer"></span>
+    <span class="count" id="count"></span>
+  </div>
+  <div class="progress"><i id="bar"></i></div>
+</section>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const $ = id => document.getElementById(id);
+await Promise.race([
+  Promise.all([document.fonts.load('600 64px "Space Grotesk"'), document.fonts.load('700 64px "JetBrains Mono"'), document.fonts.load('400 32px "JetBrains Mono"')]),
+  new Promise(r => setTimeout(r, 2500)),
+]);
+
+/* =========================================================
+   THE MEMORY HIERARCHY  (edit sizes / costs here)
+   ========================================================= */
+const COL = { cyan: 0x5ee6ff, amber: 0xffb547, violet: 0xa48cff, pink: 0xff6fae, blue: 0x6aa8ff, green: 0x7dffb0, red: 0xff5a5a };
+const LV = ['L1', 'L2', 'L3'];
+const LEVEL = {
+  L1:  { x: -10, cap: 2, cols: 1, c: COL.cyan,   name: 'L1 CACHE', sub: 'smallest · fastest', cost: 4 },
+  L2:  { x: -5.5, cap: 4, cols: 2, c: COL.violet, name: 'L2 CACHE', sub: 'bigger · fast', cost: 12 },
+  L3:  { x: 0.5, cap: 6, cols: 2, c: COL.blue,   name: 'L3 CACHE', sub: 'shared by all cores', cost: 40 },
+  RAM: { x: 16, cap: 8, cols: 4, c: COL.amber,  name: 'RAM · MAIN MEMORY', sub: 'huge · far away · slow', cost: 200 },
+};
+const LEG_MS = { L1: 450, L2: 650, L3: 950, RAM: 2700 }; // travel time reaching each level (longer = slower)
+const RAM_LINES = [400, 404, 500, 504, 600, 604, 700, 704];
+const SCORES = [7, 3, 9, 5, 8, 2, 6, 4];
+const valueAt = a => (a >= 400 && a < 408) ? SCORES[a - 400] : ((a * 37) % 89) + 10;
+const lineOf = a => a - (a % 4);
+const lineName = l => `${l}–${l + 3}`;
+
+/* =========================================================
+   SCENE
+   ========================================================= */
+const canvas = $('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x04060a);
+scene.fog = new THREE.FogExp2(0x04060a, 0.021);
+const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 300);
+camera.position.set(-40, 26, 50);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.06;
+controls.minDistance = 2.5; controls.maxDistance = 70; controls.maxPolarAngle = Math.PI * 0.495;
+controls.target.set(1, 1.5, 0); controls.autoRotate = true; controls.autoRotateSpeed = 0.25;
+scene.add(new THREE.HemisphereLight(0x8fa8ff, 0x05060a, 0.7));
+const dl = new THREE.DirectionalLight(0xffffff, 1.2); dl.position.set(5, 12, 8); scene.add(dl);
+
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const glowColor = (hex, k = 2.2) => new THREE.Color(hex).multiplyScalar(k);
+const hex = c => '#' + new THREE.Color(c).getHexString();
+function canvasTex(w, h, draw) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const g = cv.getContext('2d'); draw && draw(g, w, h);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  return { cv, g, t };
+}
+function rr(g, x, y, w, h, r) { g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); }
+const SANS = '"Space Grotesk", system-ui, sans-serif', MONO = '"JetBrains Mono", ui-monospace, monospace';
+const glowing = [];
+function glassBox(w, h, d, edgeHex) {
+  const body = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 2, Math.min(w, h, d) * 0.12),
+    new THREE.MeshStandardMaterial({ color: 0x121c2c, emissive: 0x060b14, roughness: 0.35, metalness: 0.45 }));
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w, h, d)), new THREE.LineBasicMaterial({ color: glowColor(edgeHex, 1.6) }));
+  edges.scale.setScalar(0.995); body.add(edges);
+  const ent = { edges, base: new THREE.Color(edgeHex), tint: null, glow: 0, flash: 0, k: 1.6 };
+  glowing.push(ent); body.userData.ent = ent; return body;
+}
+function textSprite(text, colorHex, { size = 0.34, bg = 'rgba(6,9,14,.88)', font = MONO, weight = 700 } = {}) {
+  const fs = 64, pad = 30;
+  const tmp = document.createElement('canvas').getContext('2d'); tmp.font = `${weight} ${fs}px ${font}`;
+  const w = Math.ceil(tmp.measureText(text).width) + pad * 2, h = fs + 34;
+  const { t } = canvasTex(w, h, g => {
+    if (bg) { rr(g, 2, 2, w - 4, h - 4, h / 2 - 2); g.fillStyle = bg; g.fill(); g.lineWidth = 3; g.strokeStyle = hex(colorHex); g.stroke(); }
+    g.font = `${weight} ${fs}px ${font}`; g.fillStyle = bg ? '#ffffff' : hex(colorHex); g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(text, w / 2, h / 2 + 3);
+  });
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true }));
+  s.scale.set(size * w / h, size, 1); s.renderOrder = 20; return s;
+}
+function floorText(text, w, h, colorHex, opacity = 0.75) {
+  const px = 160;
+  const { t } = canvasTex(Math.round(w * px), Math.round(h * px), (g, cw, ch) => {
+    g.font = `500 ${ch * 0.62}px ${MONO}`; g.fillStyle = hex(colorHex); g.textBaseline = 'middle';
+    if ('letterSpacing' in g) g.letterSpacing = `${ch * 0.12}px`;
+    g.fillText(text, 4, ch / 2);
+  });
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; return m;
+}
+
+/* ---------- ground ---------- */
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, uniforms: { uColor: { value: new THREE.Color(0x3d6a9a) } },
+  vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+  fragmentShader: `uniform vec3 uColor; varying vec3 vW;
+    float grid(vec2 p, float s){ vec2 q = p / s; vec2 g = abs(fract(q - .5) - .5) / fwidth(q); return 1. - min(min(g.x, g.y), 1.); }
+    void main(){ float d = length(vW.xz - vec2(1., 0.)); float fade = 1. - smoothstep(8., 40., d);
+      float l = grid(vW.xz, 1.) * .22 + grid(vW.xz, 5.) * .45; gl_FragColor = vec4(uColor * l * fade, l * fade); }`,
+}));
+ground.rotation.x = -Math.PI / 2; scene.add(ground);
+
+/* ---------- the CPU ---------- */
+const LANE_Z = 2.4;
+const CPU = V(-14.5, 0.9, 0.6);
+const cpu = glassBox(3, 1.8, 2.8, COL.cyan); cpu.position.copy(CPU); scene.add(cpu);
+const cpuLbl = textSprite('CPU CORE', COL.cyan, { size: 0.42, bg: null }); cpuLbl.position.set(CPU.x, 2.5, CPU.z); scene.add(cpuLbl);
+const cpuDisp = canvasTex(600, 360);
+const cpuFace = new THREE.Mesh(new THREE.PlaneGeometry(2.9, 1.74), new THREE.MeshBasicMaterial({ map: cpuDisp.t, transparent: true, color: 0xeeeeee }));
+cpuFace.position.set(CPU.x, CPU.y, CPU.z + 1.405); scene.add(cpuFace);
+let cpuDrawn = null;
+function drawCPU(line1, line2, mood = 'idle') {
+  const key = line1 + line2 + mood; if (cpuDrawn === key) return; cpuDrawn = key;
+  const { g, cv, t } = cpuDisp, w = cv.width, h = cv.height; g.clearRect(0, 0, w, h);
+  g.fillStyle = mood === 'wait' ? 'rgba(40,14,14,.7)' : 'rgba(6,10,16,.6)'; rr(g, 0, 0, w, h, 24); g.fill(); g.textBaseline = 'middle';
+  g.fillStyle = '#7d8a9c'; g.font = `500 26px ${MONO}`; g.fillText('REGISTER', 30, 46);
+  g.fillStyle = '#ffffff'; g.font = `700 70px ${MONO}`; g.fillText(line1 || '—', 30, 150);
+  g.fillStyle = mood === 'wait' ? '#ff8a8a' : mood === 'got' ? '#7dffb0' : '#9fb0c8'; g.font = `500 34px ${MONO}`; g.fillText(line2 || '', 30, 262);
+  t.needsUpdate = true;
+}
+
+/* ---------- caches + RAM racks ---------- */
+const racks = {};
+const SW = 2.1, SH = 0.72;
+function slotPos(lv, i) {
+  const L = LEVEL[lv], c = i % L.cols, r = Math.floor(i / L.cols);
+  const gapX = 2.3;
+  return V(L.x + (c - (L.cols - 1) / 2) * gapX, 0.6 + r * 0.9, 0);
+}
+Object.entries(LEVEL).forEach(([lv, L]) => {
+  const slots = [];
+  for (let i = 0; i < L.cap; i++) {
+    const box = glassBox(SW, SH, 0.9, L.c); box.position.copy(slotPos(lv, i)); box.userData.slot = { lv, i }; scene.add(box);
+    const disp = canvasTex(420, 144);
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(SW - 0.06, SH - 0.06), new THREE.MeshBasicMaterial({ map: disp.t, transparent: true, color: 0xeeeeee }));
+    face.position.copy(slotPos(lv, i)).add(V(0, 0, 0.455)); scene.add(face);
+    slots.push({ box, disp, drawn: null });
+  }
+  const rows = Math.ceil(L.cap / L.cols), top = 0.6 + (rows - 1) * 0.9 + 0.7;
+  const lbl = textSprite(L.name, L.c, { size: lv === 'RAM' ? 0.5 : 0.4, bg: null }); lbl.position.set(L.x, top + 0.55, 0); scene.add(lbl);
+  const sub = textSprite(L.sub, L.c, { size: 0.22, bg: null, weight: 500 }); sub.position.set(L.x, top + 0.12, 0); scene.add(sub);
+  // gate on the road
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.035, 12, 64), new THREE.MeshBasicMaterial({ color: glowColor(L.c, 2) }));
+  ring.rotation.y = Math.PI / 2; ring.position.set(L.x, 0.62, LANE_Z); scene.add(ring);
+  const tag = textSprite('MISS', COL.red, { size: 0.42 }); tag.position.set(L.x, 1.75, LANE_Z); tag.material.opacity = 0; scene.add(tag);
+  const cyc = floorText(`${L.cost} cycles`, 1.9, 0.28, L.c, .8); cyc.position.set(L.x - 0.2, 0.03, LANE_Z + 1.1); scene.add(cyc);
+  racks[lv] = { slots, ring, tag, tagT: 0, tagLevel: lv, top };
+});
+function setTag(lv, text, c) {
+  const r = racks[lv]; scene.remove(r.tag);
+  r.tag = textSprite(text, c, { size: 0.42 }); r.tag.position.set(LEVEL[lv].x, 1.75, LANE_Z); scene.add(r.tag); r.tagT = 2.2;
+}
+function drawSlot(lv, i, line, mode) {
+  const s = racks[lv].slots[i]; const key = line + '|' + mode; if (s.drawn === key) return; s.drawn = key;
+  const { g, cv, t } = s.disp, w = cv.width, h = cv.height; g.clearRect(0, 0, w, h);
+  const col = hex(LEVEL[lv].c);
+  g.fillStyle = mode === 'hit' ? 'rgba(30,90,60,.75)' : mode === 'evict' ? 'rgba(110,25,25,.75)' : 'rgba(6,10,16,.6)'; g.fillRect(0, 0, w, h);
+  g.textBaseline = 'middle';
+  if (line == null) { g.fillStyle = '#334052'; g.font = `500 30px ${MONO}`; g.fillText('empty', 24, h / 2); t.needsUpdate = true; return; }
+  g.fillStyle = col; g.font = `700 34px ${MONO}`; g.fillText(lineName(line), 22, 40);
+  g.fillStyle = '#6f7c8f'; g.font = `500 18px ${MONO}`; g.textAlign = 'right'; g.fillText('ADDRESSES', w - 20, 40); g.textAlign = 'left';
+  for (let k = 0; k < 4; k++) {
+    g.fillStyle = 'rgba(255,255,255,.06)'; rr(g, 22 + k * 96, 76, 86, 50, 8); g.fill();
+    g.fillStyle = '#ffffff'; g.font = `700 30px ${MONO}`; g.textAlign = 'center'; g.fillText(String(valueAt(line + k)), 65 + k * 96, 102); g.textAlign = 'left';
+  }
+  t.needsUpdate = true;
+}
+
+/* ---------- the road ---------- */
+function flowTex() {
+  const { t } = canvasTex(512, 16, (g, w) => {
+    for (let i = 0; i < 4; i++) { const x = i * w / 4; const gr = g.createLinearGradient(x, 0, x + w / 4, 0);
+      gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(.75, 'rgba(255,255,255,.15)'); gr.addColorStop(.97, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = gr; g.fillRect(x, 0, w / 4, 16); }
+  });
+  t.wrapS = THREE.RepeatWrapping; return t;
+}
+const flow = flowTex(); const lanes = [];
+function lane(x0, x1, z, colorHex, dir) {
+  const len = x1 - x0, t = flow.clone(); t.needsUpdate = true; t.repeat.x = dir * len / 4;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(len, 0.16), new THREE.MeshBasicMaterial({ map: t, color: glowColor(colorHex, 1.6), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; m.position.set((x0 + x1) / 2, 0.03, z); scene.add(m); lanes.push({ t, dir });
+}
+const segs = [[CPU.x + 1.5, LEVEL.L1.x, COL.cyan], [LEVEL.L1.x, LEVEL.L2.x, COL.violet], [LEVEL.L2.x, LEVEL.L3.x, COL.blue], [LEVEL.L3.x, LEVEL.RAM.x - 4.8, COL.amber]];
+segs.forEach(([a, b, c]) => { lane(a, b, LANE_Z - 0.12, c, 1); lane(a, b, LANE_Z + 0.12, c, -1); });
+const farSign = floorText('the long road to main memory  ·  about 200 cycles  →', 9, 0.32, COL.amber, .6); farSign.position.set(LEVEL.L3.x + 6.9, 0.03, LANE_Z + 0.75); scene.add(farSign);
+const nearSign = floorText('← CLOSER = FASTER', 3.2, 0.3, COL.cyan, .6); nearSign.position.set(-12.5, 0.03, LANE_Z + 1.6); scene.add(nearSign);
+// the CPU's "chip boundary" — caches live on the processor chip, RAM does not
+(() => {
+  const s = new THREE.Shape(); const x0 = -16.6, x1 = 3.6, z0 = -1.2, z1 = 4.4, r = 0.6;
+  s.moveTo(x0 + r, z0); s.lineTo(x1 - r, z0); s.quadraticCurveTo(x1, z0, x1, z0 + r); s.lineTo(x1, z1 - r); s.quadraticCurveTo(x1, z1, x1 - r, z1);
+  s.lineTo(x0 + r, z1); s.quadraticCurveTo(x0, z1, x0, z1 - r); s.lineTo(x0, z0 + r); s.quadraticCurveTo(x0, z0, x0 + r, z0);
+  const line = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(s.getPoints(60).map(p => V(p.x, 0.02, p.y))), new THREE.LineBasicMaterial({ color: glowColor(COL.cyan, .9) }));
+  scene.add(line);
+  const lbl = floorText('INSIDE THE PROCESSOR CHIP', 5.6, 0.36, COL.cyan, .7); lbl.position.set(-16.2 + 2.8, 0.03, -0.75); scene.add(lbl);
+})();
+
+/* ---------- atmosphere + post ---------- */
+const NP = 650, pp = new Float32Array(NP * 3), ps = new Float32Array(NP);
+for (let i = 0; i < NP; i++) { pp[i * 3] = (Math.random() - .5) * 80; pp[i * 3 + 1] = Math.random() * 22; pp[i * 3 + 2] = (Math.random() - .5) * 70; ps[i] = Math.random(); }
+const pGeo = new THREE.BufferGeometry(); pGeo.setAttribute('position', new THREE.BufferAttribute(pp, 3));
+const haloTex = canvasTex(128, 128, (g, w, h) => { const r = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+  r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(.25, 'rgba(255,255,255,.35)'); r.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = r; g.fillRect(0, 0, w, h); }).t;
+scene.add(new THREE.Points(pGeo, new THREE.PointsMaterial({ map: haloTex, color: 0xc7b8ff, size: 0.12, transparent: true, opacity: .5, depthWrite: false, blending: THREE.AdditiveBlending })));
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.85, 0.55, 1.0));
+composer.addPass(new OutputPass());
+
+/* =========================================================
+   PACKETS & ANIMATION
+   ========================================================= */
+const anims = new Set();
+const animate = (ms, fn = () => {}) => new Promise(res => anims.add({ t0: performance.now(), ms, fn, res }));
+const packets = new Set();
+function cancelAll() { anims.forEach(a => a.res(false)); anims.clear(); packets.forEach(p => p.dispose()); packets.clear(); }
+const smooth = k => k * k * (3 - 2 * k);
+const coreGeo = new THREE.SphereGeometry(0.12, 16, 16), trailGeo = new THREE.SphereGeometry(0.06, 8, 8);
+function makePacket(text, c) {
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(coreGeo, new THREE.MeshBasicMaterial({ color: glowColor(c, 4) })));
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, color: c, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+  halo.scale.setScalar(1.2); g.add(halo);
+  if (text) { const l = textSprite(String(text), c, { size: 0.32 }); l.position.y = 0.48; g.add(l); }
+  scene.add(g);
+  const tm = new THREE.MeshBasicMaterial({ color: glowColor(c, 2), transparent: true, opacity: .8 });
+  const trail = Array.from({ length: 12 }, (_, i) => { const m = new THREE.Mesh(trailGeo, tm); m.scale.setScalar(1 - i / 12); m.visible = false; scene.add(m); return m; });
+  const hist = [];
+  const p = { set(pos) { g.position.copy(pos); hist.unshift(pos.clone()); if (hist.length > 36) hist.pop(); trail.forEach((m, i) => { const h = hist[i * 3]; if (h) { m.position.copy(h); m.visible = true; } }); },
+    dispose() { scene.remove(g); trail.forEach(m => scene.remove(m)); packets.delete(p); } };
+  packets.add(p); return p;
+}
+function polyline(pts) {
+  const segs = []; let total = 0;
+  for (let i = 0; i < pts.length - 1; i++) { const l = pts[i].distanceTo(pts[i + 1]); segs.push(l); total += l; }
+  return { total, at(k) { let d = k * total; for (let i = 0; i < segs.length; i++) { if (d <= segs[i] || i === segs.length - 1) return pts[i].clone().lerp(pts[i + 1], Math.min(d / (segs[i] || 1), 1)); d -= segs[i]; } } };
+}
+const GATE = lv => lv === 'CPU' ? V(CPU.x + 1.6, 0.62, LANE_Z) : V(LEVEL[lv].x, 0.62, LANE_Z);
+const SLOT = (lv, i) => slotPos(lv, i).add(V(0, 0, 0.5));
+let runId = 0;
+async function fly(pts, label, c, ms, id, onK) {
+  const path = polyline(pts); const pk = makePacket(label, c);
+  const ok = await animate(ms, k => { pk.set(path.at(smooth(k))); onK && onK(k); });
+  pk.dispose(); return ok && id === runId;
+}
+
+/* =========================================================
+   THE CACHE MODEL
+   ========================================================= */
+const fresh = () => ({ L1: { slots: [null, null], lru: [] }, L2: { slots: Array(4).fill(null), lru: [] }, L3: { slots: Array(6).fill(null), lru: [] }, hits: 0, misses: 0, cycles: 0, reqs: 0, cpu: ['', ''] });
+function simulate(st0, addr) {
+  const st = structuredClone(st0), line = lineOf(addr);
+  const hitIdx = LV.findIndex(lv => st[lv].slots.includes(line));
+  const level = hitIdx < 0 ? 'RAM' : LV[hitIdx], upto = hitIdx < 0 ? 2 : hitIdx;
+  const ev = [], ins = [];
+  for (let k = 0; k <= upto; k++) {
+    const lv = LV[k], c = st[lv]; let slot = c.slots.indexOf(line);
+    if (slot < 0) {
+      slot = c.slots.indexOf(null);
+      if (slot < 0) { const victim = c.lru.pop(); slot = c.slots.indexOf(victim); ev.push({ lv, line: victim, slot }); }
+      c.slots[slot] = line; ins.push({ lv, slot });
+    }
+    c.lru = [line, ...c.lru.filter(x => x !== line)];
+  }
+  const cost = LEVEL[level].cost;
+  st.cycles += cost; st.reqs++; level === 'RAM' ? st.misses++ : st.hits++;
+  st.cpu = [`[${addr}] = ${valueAt(addr)}`, level === 'RAM' ? `from RAM · ${cost} cycles` : `${level} hit · ${cost} cycles`];
+  return { st, level, line, ev, ins, cost, hitSlot: hitIdx < 0 ? RAM_LINES.indexOf(line) : st0[level].slots.indexOf(line) };
+}
+let C = fresh();
+let hl = {}; // temporary slot highlights  "L1:0" -> 'hit' | 'evict'
+let shownCycles = 0;
+function render(st) {
+  LV.forEach(lv => st[lv].slots.forEach((line, i) => drawSlot(lv, i, line, hl[`${lv}:${i}`] || '')));
+  RAM_LINES.forEach((line, i) => drawSlot('RAM', i, line, hl[`RAM:${i}`] || ''));
+  drawCPU(st.cpu[0], st.cpu[1], st.cpu[2] || 'idle');
+  const set = (id, v) => { const el = $(id); if (el.textContent !== String(v)) { el.textContent = v; el.parentElement.classList.remove('pop'); void el.offsetWidth; el.parentElement.classList.add('pop'); } };
+  set('hits', st.hits); set('misses', st.misses);
+  $('rate').textContent = st.reqs ? Math.round(st.hits / st.reqs * 100) + '%' : '–';
+  shownCycles = st.cycles; $('cycles').textContent = st.cycles;
+}
+
+async function request(addr, id) {
+  const r = simulate(C, addr);
+  C.cpu = [`LOAD [${addr}]`, 'checking the cache…']; render(C);
+  const order = ['L1', 'L2', 'L3', 'RAM']; let prev = 'CPU', acc = 0;
+  const base = C.cycles;
+  const setNow = v => { $('cycles').textContent = base + Math.round(v); $('now').innerHTML = `this request: <b>${Math.round(v)}</b> cycles`; };
+  for (const lv of order) {
+    const target = LEVEL[lv].cost, from = acc;
+    if (lv === 'RAM') { C.cpu = [`LOAD [${addr}]`, 'WAITING…', 'wait']; render(C); }
+    if (!await fly([GATE(prev), GATE(lv)], `${addr}?`, COL.blue, LEG_MS[lv], id, k => setNow(from + (target - from) * k))) return;
+    acc = target;
+    if (lv === r.level) {
+      setTag(lv, lv === 'RAM' ? 'FOUND IN RAM' : 'HIT!', lv === 'RAM' ? COL.amber : COL.green);
+      hl[`${lv}:${r.hitSlot}`] = 'hit'; racks[lv].slots[r.hitSlot].box.userData.ent.flash = 1; render(C);
+      if (!await fly([SLOT(lv, r.hitSlot), GATE(lv)], lineName(r.line), LEVEL[lv].c, 500, id)) return;
+      delete hl[`${lv}:${r.hitSlot}`]; render(C);
+      break;
+    }
+    setTag(lv, 'MISS', COL.red); racks[lv].ring.userData.miss = 1;
+    prev = lv;
+  }
+  // travel back towards the CPU, leaving a copy in every cache level on the way
+  let from = r.level;
+  for (let k = order.indexOf(r.level) - 1; k >= 0; k--) {
+    const lv = LV[k];
+    if (!await fly([GATE(from), GATE(lv)], lineName(r.line), LEVEL[from === 'RAM' ? 'RAM' : from].c, LEG_MS[order[k + 1]] * 0.7, id)) return;
+    const e = r.ev.find(x => x.lv === lv), ins = r.ins.find(x => x.lv === lv);
+    if (e) {
+      hl[`${lv}:${e.slot}`] = 'evict'; render(C);
+      if (!await fly([SLOT(lv, e.slot), SLOT(lv, e.slot).add(V(0, -0.2, 1.6)), V(LEVEL[lv].x, -0.6, 3.6)], 'out: ' + lineName(e.line), COL.red, 800, id)) return;
+      delete hl[`${lv}:${e.slot}`]; C[lv].slots[e.slot] = null; render(C);
+    }
+    if (ins) {
+      if (!await fly([GATE(lv), SLOT(lv, ins.slot)], '', LEVEL[lv].c, 380, id)) return;
+      C[lv].slots[ins.slot] = r.line; racks[lv].slots[ins.slot].box.userData.ent.flash = 1; render(C);
+    }
+    from = lv;
+  }
+  if (!await fly([GATE(from), V(CPU.x + 1.2, 1.2, CPU.z + 1.3)], String(valueAt(addr)), COL.green, 450, id)) return;
+  C = r.st; C.cpu = [...r.st.cpu, 'got']; render(C); cpu.userData.ent.flash = 1;
+  $('now').innerHTML = r.level === 'RAM'
+    ? `<span class="miss">cache miss</span> · this request: <b>${r.cost}</b> cycles`
+    : `<span class="hit">cache hit (${r.level})</span> · this request: <b>${r.cost}</b> cycles`;
+}
+
+/* =========================================================
+   THE JOURNEY
+   ========================================================= */
+const STEPS = [
+  { view: 'overview', kicker: 'Prologue', title: 'The waiting problem',
+    text: 'A CPU can carry out <b>billions</b> of instructions every second. But fetching something from <span class="rm">main memory (RAM)</span> takes around <b>200 clock cycles</b> — the CPU would spend most of its time <b>waiting</b>.<br><br><b>Cache</b> is the solution: a small amount of <b>very fast memory</b> built into the processor, holding copies of the data and instructions it is most likely to need next.' },
+  { view: 'hierarchy', kicker: 'The memory hierarchy', title: 'Closer means faster',
+    text: 'Memory is arranged in levels. The closer to the CPU, the <b>faster</b> — but also the <b>smaller</b> and more <b>expensive</b>.<div class="levels"><span class="l1">L1</span><span>tiny, inside each core</span><span>~4 cycles</span><span class="l2">L2</span><span>larger, per core</span><span>~12 cycles</span><span class="l3">L3</span><span>larger again, shared by all cores</span><span>~40 cycles</span><span class="rm">RAM</span><span>gigabytes, outside the CPU</span><span>~200 cycles</span></div><div style="margin-top:8px;font-size:12px;color:var(--dim)">Numbers are typical approximations.</div>' },
+  { view: 'road', kicker: 'Request 1', title: 'First request: a cache miss', act: 'run',
+    text: 'The program needs the value at address <b>400</b>. The CPU <b>always checks the cache first</b>: L1… L2… L3… It isn\'t in any of them — a <span class="miss">cache miss</span>.<br><br>The request has to travel all the way to RAM. Watch the cycle counter climb while the CPU waits.',
+    reqs: [400] },
+  { view: 'caches', kicker: 'Keeping copies', title: 'A whole block is copied',
+    text: 'On the way back, a copy was left in <span class="l3">L3</span>, <span class="l2">L2</span> and <span class="l1">L1</span>.<br><br>Notice the cache didn\'t just copy address 400 — it copied the <b>whole block 400–403</b>. Programs usually use data that is <b>next to</b> what they just used, so it is worth bringing the neighbours too.' },
+  { view: 'near', kicker: 'Request 2', title: 'Ask again: a cache hit', act: 'run',
+    text: 'The program needs address <b>400</b> again (programs often reuse the same data in loops). This time it is found straight away in L1 — a <span class="hit">cache hit</span>.<br><br>Only <b>4 cycles</b> instead of 200!',
+    reqs: [400] },
+  { view: 'near', kicker: 'Requests 3–5', title: 'Neighbours come for free', act: 'run',
+    text: 'Next the program adds up addresses <b>401</b>, <b>402</b> and <b>403</b>. They were never requested before — but they arrived with the block, so every one is a <span class="hit">hit</span>.',
+    reqs: [401, 402, 403] },
+  { view: 'road', kicker: 'Requests 6–7', title: 'The next block', act: 'run',
+    text: 'Address <b>404</b> is in a new block, so it is a <span class="miss">miss</span> and must come from RAM. The block 404–407 is copied into the cache — so <b>405</b> is a <span class="hit">hit</span>.',
+    reqs: [404, 405] },
+  { view: 'near', kicker: 'The loop repeats', title: 'Look at the score', act: 'run',
+    text: 'The loop runs again and asks for 400 and 404 — both <span class="hit">hits</span>.<br><br>9 requests took <b>428 cycles</b> with cache. Without cache, every one would go to RAM: 9 × 200 = <b>1,800 cycles</b>. The cache made this <b>4 times faster</b>.',
+    reqs: [400, 404] },
+  { view: 'caches', kicker: 'Full up', title: 'When the cache is full', act: 'run',
+    text: 'Now the program needs address <b>500</b> — a <span class="miss">miss</span>. But L1 here only has room for <b>2 blocks</b>, and both are in use.<br><br>The block that was used <b>least recently</b> (400–403) is removed from L1 to make room. It is still in L2 and L3.',
+    reqs: [500] },
+  { view: 'caches', kicker: 'Another chance', title: 'Why there are several levels', act: 'run',
+    text: 'The program asks for <b>401</b> again. It is no longer in L1 — but it <b>is</b> in L2: a <span class="hit">hit</span> in <b>12 cycles</b>. Still far quicker than 200.<br><br>Each bigger level catches what the smaller one could not hold.',
+    reqs: [401] },
+  { view: 'overview', kicker: 'Performance', title: 'More cache, more speed?',
+    text: 'A <b>larger cache</b> can hold more blocks, so more requests are <span class="hit">hits</span> and the CPU waits less — <b>better performance</b>.<br><br>So why not make all memory cache? Cache is <b>very expensive</b>, takes up <b>space on the CPU chip</b>, and very large caches become slower to search. That is why computers use a little fast cache <b>and</b> a lot of cheaper RAM.' },
+  { view: 'overview', kicker: 'Summary', title: 'Your turn', free: true,
+    text: '<ul><li>Cache is <b>small, very fast memory</b> inside the CPU</li><li>It stores <b>frequently used</b> instructions and data</li><li>The CPU checks cache first: <span class="hit">hit</span> = fast, <span class="miss">miss</span> = go to RAM</li><li>More cache → more hits → <b>better performance</b></li></ul><div style="margin-top:10px">Request an address and watch where it is found:</div><div class="addrs" id="addrs">' + [400, 401, 404, 406, 500, 503, 600, 700, 704].map(a => `<button data-a="${a}">${a}</button>`).join('') + '<button class="reset" data-a="reset">↺ empty cache</button></div><div style="margin-top:12px"><a class="linkbtn" href="cpu.html">Explore the CPU in 3D →</a></div>' },
+];
+const SNAP = []; { let st = fresh(); STEPS.forEach(s => { (s.reqs || []).forEach(a => st = simulate(st, a).st); SNAP.push(structuredClone(st)); }); }
+
+/* =========================================================
+   RUNNING STEPS
+   ========================================================= */
+let current = -1, autoplay = false, autoTimer = null, freePlay = false, busy = false, focus = [];
+const VIEWS = {
+  overview:  [V(0, 12.5, 30), V(0.5, -1.4, 1)],
+  hierarchy: [V(-8.5, 7.5, 16), V(-6.5, -0.2, 1)],
+  road:      [V(-0.5, 12, 28), V(0, -1.2, 1)],
+  caches:    [V(-6.5, 7.2, 15), V(-6, -0.1, 0.5)],
+  near:      [V(-13.5, 5.8, 12.5), V(-12.5, -0.1, 1)],
+};
+let flight = null;
+function flyTo(name, ms = 1800) {
+  const [p, t] = VIEWS[name]; const pos = p.clone();
+  const aspect = innerWidth / innerHeight; if (aspect < 1.1) pos.sub(t).multiplyScalar(1 + (1.1 - aspect) * 2.2).add(t);
+  flight = { p0: camera.position.clone(), t0: controls.target.clone(), p1: pos, t1: t.clone(), start: performance.now(), ms };
+}
+function go(i) {
+  if (i < 0 || i >= STEPS.length) return;
+  const id = ++runId; cancelAll(); clearTimeout(autoTimer); hl = {}; busy = false;
+  current = i; const step = STEPS[i]; freePlay = false;
+  C = structuredClone(i > 0 ? SNAP[i - 1] : fresh()); render(C);
+  $('now').innerHTML = '';
+  $('storyBody').innerHTML = `<div class="fade-in"><div class="kicker">${step.kicker}</div><h2>${step.title}</h2><div class="text">${step.text}</div></div>`;
+  $('count').textContent = `${i + 1} / ${STEPS.length}`;
+  $('bar').style.width = `${((i + 1) / STEPS.length) * 100}%`;
+  $('prev').disabled = i === 0; $('prev').style.opacity = i === 0 ? .35 : 1;
+  const last = i === STEPS.length - 1;
+  $('next').textContent = last ? '↺ Start again' : 'Next →';
+  flyTo(step.view);
+  (async () => {
+    await animate(step.reqs ? 1100 : 0);
+    for (const a of step.reqs || []) { if (id !== runId) return; await request(a, id); await animate(350); }
+    if (id !== runId) return;
+    C = structuredClone(SNAP[i]); hl = {}; render(C);
+    if (step.free) freePlay = true;
+    if (autoplay && !last) {
+      const read = Math.min(9000, 2600 + step.text.replace(/<[^>]+>/g, '').length * 26);
+      autoTimer = setTimeout(() => { if (id === runId) go(i + 1); }, read);
+    } else if (last) setAuto(false);
+  })();
+}
+function setAuto(on) { autoplay = on; $('auto').setAttribute('aria-pressed', String(on)); $('auto').textContent = on ? '❚❚ Pause' : '▶ Auto'; }
+$('next').onclick = () => current === STEPS.length - 1 ? go(0) : go(current + 1);
+$('prev').onclick = () => go(current - 1);
+$('auto').onclick = () => { setAuto(!autoplay); if (autoplay) go(current === STEPS.length - 1 ? 0 : current + 1); };
+addEventListener('keydown', e => {
+  if (!$('intro').classList.contains('gone')) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); enter(); } return; }
+  if (e.target.closest && e.target.closest('.addrs')) return;
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); $('next').click(); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); go(current - 1); }
+  if (e.key === 'a' || e.key === 'A') $('auto').click();
+});
+controls.addEventListener('start', () => { flight = null; controls.autoRotate = false; });
+function enter() {
+  if ($('intro').classList.contains('gone')) return;
+  $('intro').classList.add('gone'); controls.autoRotate = false;
+  setTimeout(() => { $('story').classList.remove('hidden'); $('hud').classList.add('show'); }, 900);
+  go(0); flight.ms = 3400;
+}
+$('enter').onclick = enter;
+
+/* ---------- free play ---------- */
+async function freeRequest(a) {
+  if (!freePlay || busy) return;
+  busy = true; $('addrs')?.classList.add('busy');
+  const id = runId;
+  if (a === 'reset') { C = fresh(); render(C); $('now').innerHTML = 'cache emptied — every first request will be a miss'; }
+  else { if (lineOf(a) >= 400 && !RAM_LINES.includes(lineOf(a))) a = 400; await request(a, id); }
+  busy = false; $('addrs')?.classList.remove('busy');
+}
+$('storyBody').addEventListener('click', e => { const b = e.target.closest('[data-a]'); if (b) freeRequest(b.dataset.a === 'reset' ? 'reset' : +b.dataset.a); });
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(); let down = null;
+const ramBoxes = racks.RAM.slots.map(s => s.box);
+canvas.addEventListener('pointerdown', e => down = { x: e.clientX, y: e.clientY });
+canvas.addEventListener('pointerup', e => {
+  if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) return; down = null;
+  if (!freePlay) return;
+  ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
+  const h = ray.intersectObjects(ramBoxes, false)[0]; if (h) freeRequest(RAM_LINES[h.object.userData.slot.i]);
+});
+canvas.addEventListener('pointermove', e => {
+  if (!freePlay || e.pointerType !== 'mouse') { canvas.style.cursor = ''; return; }
+  ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
+  canvas.style.cursor = ray.intersectObjects(ramBoxes, false).length ? 'pointer' : '';
+});
+
+/* =========================================================
+   LOOP
+   ========================================================= */
+const clk = new THREE.Clock();
+render(C);
+function tick() {
+  const dt = Math.min(clk.getDelta(), 0.05), t = clk.elapsedTime, now = performance.now();
+  for (const a of [...anims]) { const k = Math.min((now - a.t0) / a.ms, 1); a.fn(k); if (k >= 1) { anims.delete(a); a.res(true); } }
+  if (flight) {
+    const k = Math.min((now - flight.start) / flight.ms, 1), e = k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+    camera.position.lerpVectors(flight.p0, flight.p1, e); controls.target.lerpVectors(flight.t0, flight.t1, e);
+    if (k >= 1) flight = null;
+  }
+  controls.update();
+  for (const ent of glowing) {
+    ent.flash = Math.max(0, ent.flash - dt * 1.6);
+    ent.edges.material.color.copy(ent.base).multiplyScalar(ent.k * (1 + ent.flash * 3));
+  }
+  Object.entries(racks).forEach(([lv, r]) => {
+    r.tagT = Math.max(0, r.tagT - dt); r.tag.material.opacity = Math.min(1, r.tagT * 2);
+    r.tag.position.y = 1.75 + (2.2 - r.tagT) * 0.12;
+    r.ring.rotation.x = t * 0.6;
+    r.ring.userData.miss = Math.max(0, (r.ring.userData.miss || 0) - dt * 1.5);
+    r.ring.material.color.copy(r.ring.userData.miss > 0 ? new THREE.Color(COL.red) : new THREE.Color(LEVEL[lv].c)).multiplyScalar(2 + (r.ring.userData.miss || 0) * 2);
+  });
+  if (C.cpu[2] === 'wait') cpuFace.material.opacity = 0.65 + 0.35 * Math.sin(t * 8); else cpuFace.material.opacity = 1;
+  lanes.forEach(l => { l.t.offset.x += dt * 0.35 * l.dir; });
+  const pa = pGeo.attributes.position.array;
+  for (let i = 0; i < NP; i++) { pa[i * 3 + 1] += dt * (0.08 + ps[i] * 0.15); if (pa[i * 3 + 1] > 22) pa[i * 3 + 1] = 0; }
+  pGeo.attributes.position.needsUpdate = true;
+  composer.render();
+  requestAnimationFrame(tick);
+}
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); });
+$('loading').classList.add('done');
+window.__cache = { go, freeRequest };
+tick();
+</script>
+</body>
+</html>

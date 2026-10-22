@@ -564,7 +564,7 @@ function select(k, mesh) {
   if (eGoal !== explodeTarget) setExplodeTarget(eGoal);
 
   // where will the part be once the layers have finished moving?
-  const target = mesh || (byPart[k] && byPart[k][0]);
+  const target = mesh || (k === 'cache' ? l3 : byPart[k] && byPart[k][0]);
   if (!target) return;
   applyExplode(eGoal); chip.updateMatrixWorld(true);
   const box = new THREE.Box3();
